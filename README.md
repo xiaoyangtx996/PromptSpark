@@ -9,8 +9,6 @@
 
 多宿主规划中；**当前安装入口仅开放已验证的 Cursor**（Codex / Devin / Antigravity 测试通过后再开放）。
 
-本项目认可 [LINUX DO 社区](https://linux.do)。
-
 <p align="center">
   <img src="./image/ui-preview.png" alt="PromptSpark 设置界面预览" width="420" />
 </p>
@@ -229,5 +227,5 @@ iex "& { $(irm https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/
 ---
 
 ## 📄 License
-
+本项目认可 [LINUX DO 社区](https://linux.do)。
 [MIT](./LICENSE) © PromptSpark contributors
