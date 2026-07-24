@@ -133,12 +133,20 @@ iex "& { $(irm https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/
 
 ## 📦 本地 / 开发者安装
 
-若已 clone 本仓库：
+若已 clone 本仓库，**请用系统 CMD / PowerShell**（不要在 Cursor 内置终端里跑，否则关进程会把安装一起杀掉）：
+
+```bat
+scripts\install-cursor.cmd
+```
+
+或：
 
 ```powershell
 cd path\to\PromptSpark
-node install.mjs
+node install.mjs --hosts=cursor
 ```
+
+流程：关闭 Cursor → 写入 `workbench.html` → 自动再启动。
 
 非交互示例：
 
@@ -164,6 +172,7 @@ node scripts/rebuild-cursor.mjs
 PromptSpark/
 ├── scripts/
 │   ├── install.ps1          # 一键安装引导（irm | iex）
+│   ├── install-cursor.cmd   # 本地：关 Cursor → 注入 → 重启
 │   └── rebuild-cursor.mjs   # 本地构建并装到 Cursor
 ├── src/
 │   ├── prompt-optimize.codex-source.js
@@ -185,8 +194,11 @@ PromptSpark/
 **Q: 执行 `irm | iex` 报错找不到 Node？**  
 先安装 [Node.js LTS](https://nodejs.org/)，关闭并重新打开 PowerShell 再试。
 
+**Q: 安装时提示 EPERM / operation not permitted？**  
+请用仓库里的 `scripts\install-cursor.cmd`（或系统 CMD 运行 `node install.mjs --hosts=cursor`），不要在 Cursor 内置终端执行。安装器会先关 Cursor 再写文件。
+
 **Q: 安装成功但看不到星星按钮？**  
-请**完全退出**对应应用（托盘图标也要退出）后再打开。Cursor 修补 workbench 后必须冷启动。
+请确认安装输出有 `✓ Cursor: installed`。冷启动后按钮在 Composer 输入框右侧（附件/麦克风旁），图标为 ✨。
 
 **Q: 点击优化提示 Failed to fetch / CORS？**  
 确认本地代理在跑：`http://127.0.0.1:37841`。可在 `%LOCALAPPDATA%\PromptSpark` 执行 `node proxy.mjs`。

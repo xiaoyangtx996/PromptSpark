@@ -463,19 +463,71 @@ function escapeRe(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function isProcessRunning(name) {
+  try {
+    const out = execSync(`tasklist /FI "IMAGENAME eq ${name}.exe" /NH`, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
+    });
+    return String(out).toLowerCase().includes(`${name}.exe`.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 function killProcesses(names) {
   for (const name of names) {
     try {
-      execSync(`taskkill /IM "${name}.exe" /F`, { stdio: "ignore" });
+      execSync(`taskkill /IM "${name}.exe" /F /T`, { stdio: "ignore", windowsHide: true });
     } catch {
       /* not running */
     }
   }
 }
 
+async function waitProcessesGone(names, timeoutMs = 30000) {
+  const uniqNames = [...new Set(names.filter(Boolean))];
+  if (!uniqNames.length) return true;
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (!uniqNames.some((n) => isProcessRunning(n))) return true;
+    await sleep(350);
+  }
+  return !uniqNames.some((n) => isProcessRunning(n));
+}
+
+function collectProcessNames(selected, targets) {
+  return [...new Set(selected.flatMap((id) => targets[id]?.restart?.processNames || []))];
+}
+
+async function withWriteRetry(fn, retries = 12) {
+  let last;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return fn();
+    } catch (error) {
+      last = error;
+      const code = error?.code;
+      if (code !== "EPERM" && code !== "EBUSY" && code !== "EACCES") throw error;
+      console.log(`  写入重试 ${i + 1}/${retries}…`);
+      await sleep(400 + i * 200);
+    }
+  }
+  throw last;
+}
+
 function launchApp(exePath) {
   if (!exePath || !exists(exePath)) return false;
-  spawn(exePath, [], { detached: true, stdio: "ignore" }).unref();
+  spawn("cmd.exe", ["/c", "start", "", exePath], {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true,
+  }).unref();
   return true;
 }
 
@@ -587,14 +639,22 @@ async function selectHosts(targets) {
   return [...picked];
 }
 
-async function main() {
-  console.log(`PromptSpark installer  ·  ${UNINSTALL ? "卸载" : "安装"}`);
-  if (!UNINSTALL) {
-    await ensureProxyRunning();
+async function closeHosts(selected, targets) {
+  const procNames = collectProcessNames(selected, targets);
+  if (!procNames.length) return;
+  if (!procNames.some((n) => isProcessRunning(n))) return;
+  console.log(`关闭进程：${procNames.join(", ")} …`);
+  killProcesses(procNames);
+  const gone = await waitProcessesGone(procNames, 30000);
+  if (!gone) {
+    killProcesses(procNames);
+    await waitProcessesGone(procNames, 10000);
   }
-  const targets = detectTargets();
-  const selected = await selectHosts(targets);
-  const scriptBody = UNINSTALL ? null : ensureBuilt();
+  await sleep(1000);
+}
+
+async function applyPatches(selected, targets, scriptBody) {
+  await closeHosts(selected, targets);
 
   const results = [];
   for (const id of selected) {
@@ -603,9 +663,9 @@ async function main() {
       if (!t.workbench || !exists(t.workbench)) {
         throw new Error("未找到可注入的 workbench.html（请确认已安装原生应用）");
       }
-      const r = patchWorkbench(t.workbench, scriptBody, UNINSTALL);
+      const r = await withWriteRetry(() => patchWorkbench(t.workbench, scriptBody, UNINSTALL));
       if (t.productJson && exists(t.productJson)) {
-        updateProductChecksum(t.productJson, t.checksumKey, t.workbench);
+        await withWriteRetry(() => updateProductChecksum(t.productJson, t.checksumKey, t.workbench));
       }
       results.push({ id, ...r, path: t.workbench });
       console.log(`✓ ${t.label}: ${results.at(-1).action}`);
@@ -615,29 +675,44 @@ async function main() {
       results.push({ id, error: error.message });
     }
   }
+  return results;
+}
 
-  if (!NO_RESTART && results.some((r) => r.changed)) {
-    const restart = await ask("\n是否立即重启已安装的应用？[Y/n] ");
-    if (!restart || /^y/i.test(restart)) {
-      for (const id of selected) {
-        const t = targets[id];
-        if (!t?.restart) continue;
-        console.log(`重启 ${t.label} …`);
-        killProcesses(t.restart.processNames);
-        await new Promise((r) => setTimeout(r, 800));
-        if (!UNINSTALL && t.restart.launch) {
-          launchApp(t.restart.launch);
-        }
-      }
-    } else {
-      console.log("请手动重启对应应用后生效。");
+async function relaunchHosts(selected, targets) {
+  if (NO_RESTART || UNINSTALL) {
+    if (NO_RESTART) console.log("已跳过重启（--no-restart）。请手动打开应用后生效。");
+    return;
+  }
+  for (const id of selected) {
+    const t = targets[id];
+    if (!t?.restart?.launch) continue;
+    console.log(`启动 ${t.label} …`);
+    if (!launchApp(t.restart.launch)) {
+      console.warn(`⚠ 未能启动：${t.restart.launch}`);
     }
+  }
+}
+
+async function main() {
+  console.log(`PromptSpark installer  ·  ${UNINSTALL ? "卸载" : "安装"}`);
+  if (!UNINSTALL) {
+    await ensureProxyRunning();
+  }
+  const targets = detectTargets();
+  const selected = await selectHosts(targets);
+  const scriptBody = UNINSTALL ? null : ensureBuilt();
+
+  // 顺序：关进程 → 写补丁 → 再启动
+  const results = await applyPatches(selected, targets, scriptBody);
+  if (results.some((r) => r.changed)) {
+    await relaunchHosts(selected, targets);
   }
 
   console.log("\n完成。交互：左键优化 / 再点还原 / 右键或 Alt+点击打开设置。");
   if (!UNINSTALL) {
     console.log(`API 请求经本地代理 http://127.0.0.1:${PROXY_PORT}（Electron 宿主需此代理绕过 CORS）。`);
   }
+  if (results.some((r) => r.error)) process.exit(1);
 }
 
 const isMain =
