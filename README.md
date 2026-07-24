@@ -5,7 +5,6 @@
 [![GitHub stars](https://img.shields.io/github/stars/xiaoyangtx996/PromptSpark?style=flat-square&logo=github)](https://github.com/xiaoyangtx996/PromptSpark/stargazers)
 [![GitHub issues](https://img.shields.io/github/issues/xiaoyangtx996/PromptSpark?style=flat-square)](https://github.com/xiaoyangtx996/PromptSpark/issues)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](./LICENSE)
-[![认可 linux.do](https://img.shields.io/badge/认可-linux.do-blue?style=flat-square)](https://linux.do)
 
 多宿主规划中；**当前安装入口仅开放已验证的 Cursor**（Codex / Devin / Antigravity 测试通过后再开放）。
 
@@ -222,10 +221,13 @@ iex "& { $(irm https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/
 
 - Bug / 需求：提交 [Issues](https://github.com/xiaoyangtx996/PromptSpark/issues)  
 - 欢迎 PR：改进安装体验、宿主适配、文档与动效  
-- 社区讨论欢迎到 [LINUX DO](https://linux.do)（本项目认可该社区）  
 
 ---
 
 ## 📄 License
+
+本项目采用 [MIT](./LICENSE) 开源协议。
+
 本项目认可 [LINUX DO 社区](https://linux.do)。
-[MIT](./LICENSE) © PromptSpark contributors
+
+© PromptSpark contributors
