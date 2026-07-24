@@ -6,7 +6,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/xiaoyangtx996/PromptSpark?style=flat-square)](https://github.com/xiaoyangtx996/PromptSpark/issues)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](./LICENSE)
 
-多宿主支持：**Codex** · **Cursor** · **Devin / Windsurf** · **Antigravity**
+多宿主规划中；**当前安装入口仅开放已验证的 Cursor**（Codex / Devin / Antigravity 测试通过后再开放）。
 
 <p align="center">
   <img src="./image/ui-preview.png" alt="PromptSpark 设置界面预览" width="420" />
@@ -50,7 +50,7 @@
 
 - **Windows**（当前一键脚本面向 Windows）
 - **[Node.js LTS](https://nodejs.org/)**（安装器与本地代理依赖 Node）
-- 至少一个目标应用：Codex / Cursor / Devin / Antigravity
+- 已安装 **Cursor**
 - 可用的 LLM API（OpenAI 兼容或 Anthropic）
 
 > 若尚未安装 Node：打开 https://nodejs.org/ 安装 LTS，然后**重新打开**终端再执行安装命令。
@@ -120,14 +120,14 @@ iex "& { $(irm https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/
 
 ## 🧩 支持的应用
 
-| 应用 | 安装方式 | 说明 |
+| 应用 | 状态 | 说明 |
 |:---|:---|:---|
-| **Codex** | 注入原生应用 `workbench.html` + 更新 checksum | 官方 OpenAI Codex 桌面端（非 Codex++） |
-| **Cursor** | 注入 `workbench.html` + 更新 `product.json` checksum | 自动探测常见安装路径 |
-| **Devin / Windsurf** | 注入 workbench | 探测 Devin / Windsurf 安装目录 |
-| **Antigravity** | 注入 workbench | 探测常见 Antigravity 路径 |
+| **Cursor** | ✅ 已开放 | 注入 `workbench.html` + 更新 `product.json` checksum |
+| **Codex** | ⏳ 待验证 | 安装入口暂未开放 |
+| **Devin / Windsurf** | ⏳ 待验证 | 安装入口暂未开放 |
+| **Antigravity** | ⏳ 待验证 | 安装入口暂未开放 |
 
-安装脚本会列出本机检测到的可用目标，按提示选择即可。
+当前运行 `node install.mjs` / 一键脚本时，只会安装到 **Cursor**。
 
 ---
 
@@ -143,8 +143,8 @@ node install.mjs
 非交互示例：
 
 ```powershell
-node install.mjs --hosts=cursor,codex
-node install.mjs --hosts=a --no-restart
+node install.mjs --hosts=cursor
+node install.mjs --hosts=cursor --no-restart
 node install.mjs --uninstall
 ```
 

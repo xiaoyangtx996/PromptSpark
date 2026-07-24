@@ -4,7 +4,7 @@
   PromptSpark 一键安装 / 卸载（Windows）
 
 .DESCRIPTION
-  从 GitHub 拉取安装器到本地缓存，交互选择要注入的应用（Cursor / Codex / Devin / Antigravity）。
+  从 GitHub 拉取安装器到本地缓存，注入已验证宿主（当前仅 Cursor）。
 
 .EXAMPLE
   # 推荐：一键安装

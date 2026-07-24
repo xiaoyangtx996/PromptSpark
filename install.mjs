@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
  * PromptSpark installer
- * Interactive install into Codex / Cursor / Devin / Antigravity
+ * Interactive install into Cursor (other hosts gated until verified)
  *
  * Usage:
  *   node install.mjs
- *   node install.mjs --hosts=codex,cursor
+ *   node install.mjs --hosts=cursor
  *   node install.mjs --uninstall
  *   node install.mjs --no-restart
  */
@@ -37,6 +37,12 @@ const FORCE_HOSTS = hostsArg
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean)
   : null;
+
+/**
+ * 当前对外安装入口只开放已验证宿主。
+ * 其它宿主检测逻辑保留，待测试通过后再加入此列表。
+ */
+const ENABLED_HOST_IDS = new Set(["cursor"]);
 
 function exists(p) {
   try {
@@ -338,7 +344,7 @@ function detectTargets() {
     codex: {
       id: "codex",
       label: "Codex",
-      available: !!(codexExe && codexWb.workbench && exists(codexWb.workbench)),
+      available: ENABLED_HOST_IDS.has("codex") && !!(codexExe && codexWb.workbench && exists(codexWb.workbench)),
       exe: codexExe,
       workbench: codexWb.workbench,
       productJson: codexWb.productJson,
@@ -351,7 +357,7 @@ function detectTargets() {
     cursor: {
       id: "cursor",
       label: "Cursor",
-      available: !!(cursorExe && cursorWb.workbench && exists(cursorWb.workbench)),
+      available: ENABLED_HOST_IDS.has("cursor") && !!(cursorExe && cursorWb.workbench && exists(cursorWb.workbench)),
       exe: cursorExe,
       workbench: cursorWb.workbench,
       productJson: cursorWb.productJson,
@@ -364,7 +370,7 @@ function detectTargets() {
     devin: {
       id: "devin",
       label: "Devin / Windsurf",
-      available: !!(devinExe && devinWb.workbench && exists(devinWb.workbench)),
+      available: ENABLED_HOST_IDS.has("devin") && !!(devinExe && devinWb.workbench && exists(devinWb.workbench)),
       exe: devinExe,
       workbench: devinWb.workbench,
       productJson: devinWb.productJson,
@@ -377,7 +383,8 @@ function detectTargets() {
     antigravity: {
       id: "antigravity",
       label: "Antigravity",
-      available: !!(antigravityWb.workbench && exists(antigravityWb.workbench)),
+      available:
+        ENABLED_HOST_IDS.has("antigravity") && !!(antigravityWb.workbench && exists(antigravityWb.workbench)),
       exe: antigravityExe,
       workbench: antigravityWb.workbench,
       productJson: antigravityWb.productJson,
@@ -523,27 +530,41 @@ function ask(question) {
 
 async function selectHosts(targets) {
   if (FORCE_HOSTS?.length) {
-    return FORCE_HOSTS.filter((id) => targets[id]?.available);
+    const picked = FORCE_HOSTS.filter((id) => targets[id]?.available);
+    const blocked = FORCE_HOSTS.filter((id) => !ENABLED_HOST_IDS.has(id));
+    if (blocked.length) {
+      console.warn(`⚠ 暂未开放安装（待验证）：${blocked.join(", ")}。当前仅支持：${[...ENABLED_HOST_IDS].join(", ")}`);
+    }
+    if (!picked.length) {
+      console.error("未选中可安装目标。当前仅开放 Cursor。");
+      process.exit(1);
+    }
+    return picked;
   }
   const available = Object.values(targets).filter((t) => t.available);
   if (!available.length) {
-    console.error("未检测到可安装的目标程序（Codex / Cursor / Devin / Antigravity）。");
-    console.error("请确认已安装对应原生应用；或设置 PROMPTSPARK_CURSOR_EXE 等环境变量指向 exe 后重试。");
+    console.error("未检测到 Cursor（当前安装器仅开放 Cursor）。");
+    console.error("请确认已安装 Cursor；或设置环境变量后重试：");
+    console.error('  $env:PROMPTSPARK_CURSOR_EXE="C:\\path\\to\\Cursor.exe"');
     process.exit(1);
   }
 
-  console.log("\n检测到以下程序：\n");
+  console.log("\n可安装目标（当前仅开放已验证宿主）：\n");
   available.forEach((t, i) => {
     console.log(`  [${i + 1}] ${t.label}`);
     if (t.exe) console.log(`      exe: ${t.exe}`);
     if (t.workbench) console.log(`      workbench: ${t.workbench}`);
   });
+  if (available.length === 1) {
+    console.log(`\n将安装到：${available[0].label}`);
+    return [available[0].id];
+  }
   console.log(`  [a] 全部安装`);
   console.log(`  [q] 取消\n`);
-  console.log("提示：若未自动找到，可设置环境变量后重试，例如：");
-  console.log("  $env:PROMPTSPARK_CURSOR_EXE=\"C:\\path\\to\\Cursor.exe\"\n");
+  console.log("提示：若未自动找到，可设置：");
+  console.log('  $env:PROMPTSPARK_CURSOR_EXE="C:\\path\\to\\Cursor.exe"\n');
 
-  const answer = await ask("选择要安装的目标（如 1,2 或 a）： ");
+  const answer = await ask("选择要安装的目标（如 1 或 a）： ");
   if (!answer || answer.toLowerCase() === "q") {
     console.log("已取消。");
     process.exit(0);
