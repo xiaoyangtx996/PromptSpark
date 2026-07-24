@@ -1,0 +1,16 @@
+{
+  "name": "promptspark",
+  "version": "1.3.0",
+  "private": true,
+  "description": "PromptSpark — multi-host prompt optimizer for native Codex / Cursor / Devin / Antigravity",
+  "type": "module",
+  "bin": {
+    "promptspark": "./install.mjs",
+    "prompt-optimize": "./install.mjs"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "install:hosts": "node install.mjs",
+    "uninstall": "node install.mjs --uninstall"
+  }
+}
