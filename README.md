@@ -228,6 +228,6 @@ iex "& { $(irm https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/
 
 本项目采用 [MIT](./LICENSE) 开源协议。
 
-本项目认可 [LINUX DO 社区](https://linux.do)。
+友链： [LINUX DO 社区](https://linux.do)。
 
 © PromptSpark contributors
