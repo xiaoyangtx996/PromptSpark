@@ -53,6 +53,21 @@ function firstExisting(paths) {
   return null;
 }
 
+function uniq(list) {
+  return [...new Set(list.filter(Boolean))];
+}
+
+function winEnvPaths() {
+  const home = process.env.USERPROFILE || process.env.HOME || "";
+  return {
+    home,
+    localAppData: process.env.LOCALAPPDATA || path.join(home, "AppData", "Local"),
+    appData: process.env.APPDATA || path.join(home, "AppData", "Roaming"),
+    programFiles: process.env.ProgramFiles || "C:\\Program Files",
+    programFilesX86: process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)",
+  };
+}
+
 /** Resolve workbench.html + product.json for Electron VS Code–like shells. */
 function resolveElectronWorkbench(appRoot) {
   if (!appRoot) return { workbench: null, productJson: null, checksumKey: null };
@@ -75,72 +90,248 @@ function resolveElectronWorkbench(appRoot) {
   return { workbench, productJson, checksumKey };
 }
 
-function findCodexExe() {
-  const home = process.env.USERPROFILE || process.env.HOME || "";
-  const localAppData = process.env.LOCALAPPDATA || path.join(home, "AppData", "Local");
-  const programFiles = process.env.ProgramFiles || "C:\\Program Files";
-  const candidates = [
-    path.join(localAppData, "Programs", "Codex", "Codex.exe"),
-    path.join(localAppData, "Programs", "codex", "Codex.exe"),
-    path.join(localAppData, "Codex", "Codex.exe"),
-    path.join(programFiles, "Codex", "Codex.exe"),
-    "D:\\develop\\IDE\\Codex\\Codex.exe",
-  ];
-  const found = firstExisting(candidates);
-  if (found) return found;
+function whichExe(exeName) {
+  try {
+    const out = execSync(`where.exe ${JSON.stringify(exeName)}`, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
+    });
+    const line = String(out)
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .find((s) => s && exists(s) && /\.exe$/i.test(s));
+    return line || null;
+  } catch {
+    return null;
+  }
+}
 
-  // Microsoft Store package (may be read-only; still try to detect)
+function regAppPath(exeName) {
+  const keys = [
+    `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\${exeName}`,
+    `HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\${exeName}`,
+    `HKLM\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\App Paths\\${exeName}`,
+  ];
+  for (const key of keys) {
+    try {
+      const out = execSync(`reg query ${JSON.stringify(key)} /ve`, {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+        windowsHide: true,
+      });
+      const m = String(out).match(/REG_SZ\s+(.+)$/im);
+      if (!m) continue;
+      const p = m[1].trim().replace(/^"|"$/g, "");
+      if (p && exists(p)) return p;
+    } catch {
+      /* next */
+    }
+  }
+  return null;
+}
+
+function resolveLnkTarget(lnkPath) {
+  if (!lnkPath || !exists(lnkPath) || !/\.lnk$/i.test(lnkPath)) return null;
+  try {
+    const ps = [
+      "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:CPO_LNK)",
+      "if ($s.TargetPath) { Write-Output $s.TargetPath }",
+    ].join("; ");
+    const out = execSync(`powershell -NoProfile -NonInteractive -Command ${JSON.stringify(ps)}`, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
+      env: { ...process.env, CPO_LNK: lnkPath },
+    });
+    const p = String(out).trim().replace(/^"|"$/g, "");
+    return p && exists(p) ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+function walkFindExe(root, exeNames, { maxDepth = 4, maxDirs = 400 } = {}) {
+  if (!root || !exists(root)) return null;
+  const want = new Set(exeNames.map((n) => n.toLowerCase()));
+  const queue = [{ dir: root, depth: 0 }];
+  let seen = 0;
+  while (queue.length) {
+    const { dir, depth } = queue.shift();
+    if (++seen > maxDirs) break;
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const ent of entries) {
+      const full = path.join(dir, ent.name);
+      if (ent.isFile() && want.has(ent.name.toLowerCase()) && exists(full)) {
+        return full;
+      }
+    }
+    if (depth >= maxDepth) continue;
+    for (const ent of entries) {
+      if (!ent.isDirectory()) continue;
+      const name = ent.name.toLowerCase();
+      if (name === "node_modules" || name === ".git" || name === "cache" || name === "temp" || name === "tmp") continue;
+      queue.push({ dir: path.join(dir, ent.name), depth: depth + 1 });
+    }
+  }
+  return null;
+}
+
+function findStartMenuExe(exeNames, titleHints = []) {
+  const { home, appData, programFiles, programFilesX86 } = winEnvPaths();
+  const roots = uniq([
+    path.join(appData, "Microsoft", "Windows", "Start Menu", "Programs"),
+    path.join(home, "Desktop"),
+    path.join(programFiles, "Microsoft", "Windows", "Start Menu", "Programs"),
+    "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs",
+    programFilesX86 && path.join(programFilesX86, "Microsoft", "Windows", "Start Menu", "Programs"),
+  ]);
+  const hints = titleHints.map((h) => h.toLowerCase());
+  const wantExe = new Set(exeNames.map((n) => n.toLowerCase()));
+
+  for (const root of roots) {
+    if (!exists(root)) continue;
+    const queue = [{ dir: root, depth: 0 }];
+    let n = 0;
+    while (queue.length && n < 300) {
+      const { dir, depth } = queue.shift();
+      n++;
+      let entries;
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const ent of entries) {
+        const full = path.join(dir, ent.name);
+        if (ent.isFile() && /\.lnk$/i.test(ent.name)) {
+          const base = ent.name.replace(/\.lnk$/i, "").toLowerCase();
+          const hintOk = !hints.length || hints.some((h) => base.includes(h));
+          if (!hintOk) continue;
+          const target = resolveLnkTarget(full);
+          if (target && wantExe.has(path.basename(target).toLowerCase())) return target;
+        } else if (ent.isDirectory() && depth < 3) {
+          queue.push({ dir: full, depth: depth + 1 });
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Auto-detect an app exe by name (no developer machine hardcodes).
+ * Order: env override → PATH → App Paths registry → common install dirs → Start Menu → shallow walk.
+ * Optional override: PROMPTSPARK_CURSOR_EXE / PROMPTSPARK_CODEX_EXE / …
+ */
+function findAppExe(exeNames, { dirHints = [], titleHints = [], envKey = "" } = {}) {
+  if (envKey) {
+    const fromEnv = process.env[envKey];
+    if (fromEnv && exists(fromEnv)) return path.resolve(fromEnv);
+  }
+  const names = Array.isArray(exeNames) ? exeNames : [exeNames];
+  const { localAppData, programFiles, programFilesX86 } = winEnvPaths();
+
+  for (const name of names) {
+    const fromPath = whichExe(name);
+    if (fromPath) return fromPath;
+    const fromReg = regAppPath(name);
+    if (fromReg) return fromReg;
+  }
+
+  const commonDirs = [];
+  for (const name of names) {
+    const stem = name.replace(/\.exe$/i, "");
+    for (const hint of uniq([stem, ...dirHints])) {
+      commonDirs.push(
+        path.join(localAppData, "Programs", hint, name),
+        path.join(localAppData, hint, name),
+        path.join(programFiles, hint, name),
+        path.join(programFilesX86, hint, name),
+      );
+    }
+  }
+  const hit = firstExisting(commonDirs);
+  if (hit) return hit;
+
+  const fromMenu = findStartMenuExe(names, titleHints.length ? titleHints : dirHints);
+  if (fromMenu) return fromMenu;
+
+  const programsRoot = path.join(localAppData, "Programs");
+  return walkFindExe(programsRoot, names, { maxDepth: 4, maxDirs: 500 });
+}
+
+function findStoreCodexExe() {
+  const { programFiles } = winEnvPaths();
   const winApps = path.join(programFiles, "WindowsApps");
   if (!exists(winApps)) return null;
   try {
     const dirs = fs.readdirSync(winApps).filter((d) => /^OpenAI\.Codex_/i.test(d));
     dirs.sort().reverse();
     for (const d of dirs) {
-      const exe = path.join(winApps, d, "app", "Codex.exe");
-      if (exists(exe)) return exe;
+      const exe = firstExisting([
+        path.join(winApps, d, "app", "Codex.exe"),
+        path.join(winApps, d, "Codex.exe"),
+      ]);
+      if (exe) return exe;
     }
   } catch {
-    /* ACL / access denied */
+    /* ACL */
   }
   return null;
 }
 
 function detectTargets() {
-  const home = process.env.USERPROFILE || process.env.HOME || "";
-  const localAppData = process.env.LOCALAPPDATA || path.join(home, "AppData", "Local");
+  const codexExe =
+    findAppExe(["Codex.exe"], {
+      dirHints: ["Codex", "codex", "OpenAI Codex", "OpenAI"],
+      titleHints: ["codex", "openai"],
+      envKey: "PROMPTSPARK_CODEX_EXE",
+    }) || findStoreCodexExe();
+  const codexWb = resolveElectronWorkbench(codexExe ? path.dirname(codexExe) : null);
 
-  const codexExe = findCodexExe();
-  const codexRoot = codexExe ? path.dirname(codexExe) : null;
-  const codexWb = resolveElectronWorkbench(codexRoot);
-
-  const cursorExe = firstExisting([
-    "D:\\develop\\IDE\\cursor\\Cursor.exe",
-    path.join(localAppData, "Programs", "cursor", "Cursor.exe"),
-    path.join(localAppData, "cursor", "Cursor.exe"),
-  ]);
+  const cursorExe = findAppExe(["Cursor.exe"], {
+    dirHints: ["cursor", "Cursor"],
+    titleHints: ["cursor"],
+    envKey: "PROMPTSPARK_CURSOR_EXE",
+  });
   const cursorWb = resolveElectronWorkbench(cursorExe ? path.dirname(cursorExe) : null);
 
-  const devinExe = firstExisting([
-    "D:\\develop\\IDE\\Devin\\Devin.exe",
-    path.join(localAppData, "Programs", "Devin", "Devin.exe"),
-    path.join(localAppData, "Programs", "Windsurf", "Windsurf.exe"),
-  ]);
+  const windsurfExe = findAppExe(["Windsurf.exe"], {
+    dirHints: ["Windsurf", "windsurf"],
+    titleHints: ["windsurf"],
+    envKey: "PROMPTSPARK_WINDSURF_EXE",
+  });
+  const devinExe =
+    findAppExe(["Devin.exe"], {
+      dirHints: ["Devin", "devin"],
+      titleHints: ["devin"],
+      envKey: "PROMPTSPARK_DEVIN_EXE",
+    }) || windsurfExe;
   const devinWb = resolveElectronWorkbench(devinExe ? path.dirname(devinExe) : null);
 
-  const antigravityExe = firstExisting([
-    "D:\\develop\\IDE\\Antigravity\\Antigravity.exe",
-    "D:\\develop\\IDE\\Antigravity\\Antigravity IDE.exe",
-    path.join(localAppData, "Programs", "antigravity", "Antigravity.exe"),
-  ]);
-  const antigravityRoots = [
+  const antigravityExe = findAppExe(["Antigravity.exe", "Antigravity IDE.exe"], {
+    dirHints: ["antigravity", "Antigravity", "Antigravity IDE"],
+    titleHints: ["antigravity"],
+    envKey: "PROMPTSPARK_ANTIGRAVITY_EXE",
+  });
+  const antigravityRoots = uniq([
     antigravityExe && path.dirname(antigravityExe),
     antigravityExe && path.join(path.dirname(antigravityExe), "Antigravity"),
-    "D:\\develop\\IDE\\Antigravity\\Antigravity",
-  ].filter(Boolean);
+  ]);
   let antigravityWb = { workbench: null, productJson: null, checksumKey: null };
   for (const root of antigravityRoots) {
     antigravityWb = resolveElectronWorkbench(root);
     if (antigravityWb.workbench) break;
+  }
+  // Some installs put workbench one level above the exe folder
+  if (!antigravityWb.workbench && antigravityExe) {
+    antigravityWb = resolveElectronWorkbench(path.dirname(path.dirname(antigravityExe)));
   }
 
   return {
@@ -337,15 +528,20 @@ async function selectHosts(targets) {
   const available = Object.values(targets).filter((t) => t.available);
   if (!available.length) {
     console.error("未检测到可安装的目标程序（Codex / Cursor / Devin / Antigravity）。");
+    console.error("请确认已安装对应原生应用；或设置 PROMPTSPARK_CURSOR_EXE 等环境变量指向 exe 后重试。");
     process.exit(1);
   }
 
   console.log("\n检测到以下程序：\n");
   available.forEach((t, i) => {
     console.log(`  [${i + 1}] ${t.label}`);
+    if (t.exe) console.log(`      exe: ${t.exe}`);
+    if (t.workbench) console.log(`      workbench: ${t.workbench}`);
   });
   console.log(`  [a] 全部安装`);
   console.log(`  [q] 取消\n`);
+  console.log("提示：若未自动找到，可设置环境变量后重试，例如：");
+  console.log("  $env:PROMPTSPARK_CURSOR_EXE=\"C:\\path\\to\\Cursor.exe\"\n");
 
   const answer = await ask("选择要安装的目标（如 1,2 或 a）： ");
   if (!answer || answer.toLowerCase() === "q") {
