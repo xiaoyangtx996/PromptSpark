@@ -117,7 +117,7 @@ Cursor 的 CSP 不允许内联脚本，因此安装器会：
 | 应用 | 状态 | 说明 |
 |:---|:---:|:---|
 | Cursor | 已开放 | Windows 安装链路已验证 |
-| Codex | 待验证 | 安装入口尚未开放 |
+| Codex | 已开放 | Windows 安装链路支持 Codex |
 | Devin / Windsurf | 待验证 | 安装入口尚未开放 |
 | Antigravity | 待验证 | 安装入口尚未开放 |
 

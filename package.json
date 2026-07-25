@@ -10,6 +10,7 @@
   },
   "scripts": {
     "build": "node build.mjs",
+    "codex-runtime": "node codex-runtime.mjs",
     "install:hosts": "node install.mjs",
     "uninstall": "node install.mjs --uninstall"
   }

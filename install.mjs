@@ -29,7 +29,9 @@ const PATCH_ASSET = "promptspark.js";
 
 const args = process.argv.slice(2);
 const UNINSTALL = args.includes("--uninstall");
+let uninstallMode = UNINSTALL;
 const NO_RESTART = args.includes("--no-restart");
+const ELEVATED_CHILD = args.includes("--elevated-child");
 const hostsArg = args.find((a) => a.startsWith("--hosts="));
 const FORCE_HOSTS = hostsArg
   ? hostsArg
@@ -43,7 +45,7 @@ const FORCE_HOSTS = hostsArg
  * 当前对外安装入口只开放已验证宿主。
  * 其它宿主检测逻辑保留，待测试通过后再加入此列表。
  */
-const ENABLED_HOST_IDS = new Set(["cursor"]);
+const ENABLED_HOST_IDS = new Set(["cursor", "codex"]);
 
 function exists(p) {
   try {
@@ -278,6 +280,25 @@ function findStoreCodexExe() {
   const winApps = path.join(programFiles, "WindowsApps");
   if (!exists(winApps)) return null;
   try {
+    const packageRoot = execSync(
+      "powershell.exe -NoProfile -NonInteractive -Command \"(Get-AppxPackage -Name 'OpenAI.Codex*' | Select-Object -First 1 -ExpandProperty InstallLocation)\"",
+      { encoding: "utf8", windowsHide: true },
+    ).trim();
+    const packageExe = packageRoot && path.join(packageRoot, "app", "ChatGPT.exe");
+    if (packageExe) return packageExe;
+  } catch {
+    /* AppX lookup is unavailable on some Windows builds. */
+  }
+  try {
+    const direct = execSync(
+      `powershell.exe -NoProfile -NonInteractive -Command "Get-ChildItem -LiteralPath '${winApps.replaceAll("'", "''")}' -Directory -Filter 'OpenAI.Codex_*' -ErrorAction Stop | ForEach-Object { $p = Join-Path $_.FullName 'app\\Codex.exe'; if (Test-Path -LiteralPath $p) { $p; break } }"`,
+      { encoding: "utf8", windowsHide: true },
+    ).trim();
+    if (direct && exists(direct.split(/\r?\n/)[0].trim())) return direct.split(/\r?\n/)[0].trim();
+  } catch {
+    /* WindowsApps may deny directory enumeration; fall back to known paths. */
+  }
+  try {
     const dirs = fs.readdirSync(winApps).filter((d) => /^OpenAI\.Codex_/i.test(d));
     dirs.sort().reverse();
     for (const d of dirs) {
@@ -301,6 +322,12 @@ function detectTargets() {
       envKey: "PROMPTSPARK_CODEX_EXE",
     }) || findStoreCodexExe();
   const codexWb = resolveElectronWorkbench(codexExe ? path.dirname(codexExe) : null);
+  const codexScriptPaths = codexPlusPlusPaths();
+  const codexPlusLauncher = findAppExe(["codex-plus-plus.exe"], {
+    dirHints: ["CodexPlusPlus", "Codex++"],
+    titleHints: ["codex-plus-plus", "codex++"],
+    envKey: "PROMPTSPARK_CODEX_PLUS_EXE",
+  });
 
   const cursorExe = findAppExe(["Cursor.exe"], {
     dirHints: ["cursor", "Cursor"],
@@ -341,18 +368,20 @@ function detectTargets() {
     antigravityWb = resolveElectronWorkbench(path.dirname(path.dirname(antigravityExe)));
   }
 
-  return {
+  const targets = {
     codex: {
       id: "codex",
       label: "Codex",
-      available: ENABLED_HOST_IDS.has("codex") && !!(codexExe && codexWb.workbench && exists(codexWb.workbench)),
+      available: ENABLED_HOST_IDS.has("codex") && !!codexExe,
+      runtimeAvailable: hasCodexPlusPlusRuntime(),
       exe: codexExe,
       workbench: codexWb.workbench,
       productJson: codexWb.productJson,
       checksumKey: codexWb.checksumKey,
+      scriptPaths: codexScriptPaths,
       restart: {
-        processNames: ["Codex"],
-        launch: codexExe,
+        processNames: ["Codex", "ChatGPT"],
+        launch: codexScriptPaths.host,
       },
     },
     cursor: {
@@ -396,6 +425,67 @@ function detectTargets() {
       },
     },
   };
+  for (const target of Object.values(targets)) {
+    target.installed = target.id === "codex"
+      ? exists(codexScriptPaths.script)
+      : !!(target.workbench && exists(target.workbench) &&
+      (exists(path.join(path.dirname(target.workbench), PATCH_ASSET)) ||
+        fs.readFileSync(target.workbench, "utf8").includes(PATCH_BEGIN)));
+  }
+  return targets;
+}
+
+function codexPlusPlusPaths() {
+  const root = path.join(process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || "", "AppData", "Local"), "PromptSpark", "codex");
+  return {
+    root,
+    scripts: root,
+    registry: path.join(root, "promptspark-codex.json"),
+    script: path.join(root, "promptspark-codex.js"),
+    host: path.join(root, "promptspark-codex-host.js"),
+  };
+}
+
+function hasCodexPlusPlusRuntime() {
+  const paths = codexPlusPlusPaths();
+  return exists(paths.script) && exists(paths.host);
+}
+
+function updateCodexPlusPlusScript(scriptBody, uninstall = false, codexExe = "") {
+  const paths = codexPlusPlusPaths();
+  fs.mkdirSync(paths.root, { recursive: true });
+  let data = { enabled: true, name: "PromptSpark Codex Host", version: "1.3.0" };
+  if (exists(paths.registry)) {
+    try { data = { ...data, ...JSON.parse(fs.readFileSync(paths.registry, "utf8")) }; } catch { /* reset malformed registry */ }
+  }
+  if (uninstall) {
+    fs.rmSync(paths.script, { force: true });
+    fs.rmSync(paths.host, { force: true });
+    fs.rmSync(paths.registry, { force: true });
+    fs.rmSync(path.join(desktopPath(), "PromptSpark Codex.lnk"), { force: true });
+  } else {
+    fs.writeFileSync(paths.script, scriptBody, "utf8");
+    const runtimePath = path.join(paths.root, "promptspark-codex-runtime.mjs");
+    fs.writeFileSync(paths.registry, JSON.stringify({ exe: codexExe, script: paths.script }, null, 2), "utf8");
+    fs.copyFileSync(path.join(ROOT, "codex-runtime.mjs"), runtimePath);
+    const command = `"${process.execPath}" "${runtimePath}" "${paths.registry}"`;
+    const host = `var sh = new ActiveXObject("WScript.Shell");\r\nsh.Run(${JSON.stringify(command)}, 0, false);\r\n`;
+    fs.writeFileSync(paths.host, host, "utf8");
+    const shortcut = path.join(desktopPath(), "PromptSpark Codex.lnk");
+    const psq = (value) => `'${String(value).replaceAll("'", "''")}'`;
+    const ps = `$w=New-Object -ComObject WScript.Shell; $s=$w.CreateShortcut(${psq(shortcut)}); $s.TargetPath='wscript.exe'; $s.Arguments=${psq('"' + paths.host + '"')}; $s.WorkingDirectory=${psq(paths.root)}; $s.Description='PromptSpark Codex'; $s.Save()`;
+    try {
+      const psFile = path.join(paths.root, ".create-promptspark-shortcut.ps1");
+      fs.writeFileSync(psFile, ps, "utf8");
+      execSync(`powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${psFile}"`, { windowsHide: true });
+      fs.rmSync(psFile, { force: true });
+      if (!exists(shortcut)) console.warn(`未能创建快捷方式: ${shortcut}`);
+    } catch (error) {
+      console.warn(`快捷方式创建失败: ${error.message}`);
+    }
+  }
+  if (uninstall) fs.rmSync(paths.registry, { force: true });
+  return { changed: true, action: uninstall ? "removed" : "installed", path: paths.script };
 }
 
 function ensureBuilt() {
@@ -527,7 +617,21 @@ async function withWriteRetry(fn, retries = 3) {
 }
 
 function launchApp(exePath) {
-  if (!exePath || !exists(exePath)) return false;
+  if (!exePath) return false;
+  if (/\.(vbs|js)$/i.test(exePath)) {
+    spawn("wscript.exe", [exePath], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+    return true;
+  }
+  if (String(exePath).startsWith("shell:")) {
+    spawn("explorer.exe", [String(exePath)], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+    return true;
+  }
+  if (!exists(exePath)) {
+    try {
+      spawn("powershell.exe", ["-NoProfile", "-WindowStyle", "Hidden", "-Command", `Start-Process -FilePath '${String(exePath).replaceAll("'", "''")}'`], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+      return true;
+    } catch { return false; }
+  }
   spawn("cmd.exe", ["/c", "start", "", exePath], {
     detached: true,
     stdio: "ignore",
@@ -586,6 +690,38 @@ function ask(question) {
 }
 
 async function selectHosts(targets) {
+  const menuAvailable = [...ENABLED_HOST_IDS]
+    .map((id) => targets[id])
+    .filter(Boolean);
+  {
+  if (FORCE_HOSTS?.length) {
+    const selected = FORCE_HOSTS.filter((id) => targets[id]?.available);
+    if (!selected.length) throw new Error("未检测到可用的 Cursor");
+    return { selected, uninstall: uninstallMode };
+  }
+  if (!menuAvailable.length) throw new Error("未检测到 Cursor");
+  console.log("\nPromptSpark 安装界面\n");
+  menuAvailable.forEach((t, i) => {
+    const status = t.installed ? "已安装" : t.available ? "未安装" : "未检测到";
+    console.log(`  [${i + 1}] ${t.label} (${status})`);
+  });
+  var answer = await ask("请选择软件编号（q 取消）：");
+  if (answer.toLowerCase() === "q") { console.log("已取消。"); process.exit(0); }
+  const index = Number(answer);
+  if (!Number.isInteger(index) || index < 1 || index > menuAvailable.length) throw new Error("无效的软件编号");
+  const target = menuAvailable[index - 1];
+  if (!target.available) throw new Error(`${target.label} 未检测到，请确认已安装或设置对应 EXE 路径`);
+  console.log(`\n  [1] 安装${target.installed ? "（覆盖当前安装）" : ""}`);
+  console.log("  [2] 卸载");
+  const action = await ask("请选择操作（q 取消）：");
+  if (action.toLowerCase() === "q") { console.log("已取消。"); process.exit(0); }
+  if (action !== "1" && action !== "2") throw new Error("无效的操作");
+  uninstallMode = action === "2";
+  const verb = uninstallMode ? "卸载" : "安装";
+  const confirm = await ask(`确认${verb} ${target.label}？请输入 y 确认：`);
+  if (!/^y(es)?$/i.test(confirm)) { console.log("已取消。"); process.exit(0); }
+  return { selected: [target.id], uninstall: uninstallMode };
+  /*
   if (FORCE_HOSTS?.length) {
     const picked = FORCE_HOSTS.filter((id) => targets[id]?.available);
     const blocked = FORCE_HOSTS.filter((id) => !ENABLED_HOST_IDS.has(id));
@@ -621,7 +757,7 @@ async function selectHosts(targets) {
   console.log("提示：若未自动找到，可设置：");
   console.log('  $env:PROMPTSPARK_CURSOR_EXE="C:\\path\\to\\Cursor.exe"\n');
 
-  const answer = await ask("选择要安装的目标（如 1 或 a）： ");
+  var answer = await ask("选择要安装的目标（如 1 或 a）： ");
   if (!answer || answer.toLowerCase() === "q") {
     console.log("已取消。");
     process.exit(0);
@@ -642,6 +778,16 @@ async function selectHosts(targets) {
     process.exit(1);
   }
   return [...picked];
+  */
+  }
+}
+
+function desktopPath() {
+  try {
+    const value = execSync("powershell.exe -NoProfile -NonInteractive -Command \"[Environment]::GetFolderPath('Desktop')\"", { encoding: "utf8", windowsHide: true }).trim();
+    if (value) return value;
+  } catch { /* fallback */ }
+  return path.join(process.env.USERPROFILE || "", "Desktop");
 }
 
 async function closeHosts(selected, targets) {
@@ -665,10 +811,16 @@ async function applyPatches(selected, targets, scriptBody) {
   for (const id of selected) {
     const t = targets[id];
     try {
+      if (id === "codex") {
+        const result = updateCodexPlusPlusScript(scriptBody, uninstallMode, t.exe);
+        results.push({ id, ...result });
+        console.log(`✅${t.label}: ${result.action}`);
+        continue;
+      }
       if (!t.workbench || !exists(t.workbench)) {
         throw new Error("未找到可注入的 workbench.html（请确认已安装原生应用）");
       }
-      const r = await withWriteRetry(() => patchWorkbench(t.workbench, scriptBody, UNINSTALL));
+      const r = await withWriteRetry(() => patchWorkbench(t.workbench, scriptBody, uninstallMode));
       if (t.productJson && exists(t.productJson)) {
         await withWriteRetry(() => updateProductChecksum(t.productJson, t.checksumKey, t.workbench));
       }
@@ -684,7 +836,7 @@ async function applyPatches(selected, targets, scriptBody) {
 }
 
 async function relaunchHosts(selected, targets) {
-  if (NO_RESTART || UNINSTALL) {
+  if (NO_RESTART) {
     if (NO_RESTART) console.log("已跳过重启（--no-restart）。请手动打开应用后生效。");
     return;
   }
@@ -721,7 +873,7 @@ async function ensureElevated() {
   const childArgs = [fileURLToPath(import.meta.url), ...process.argv.slice(2)];
   const command = [
     `$process = Start-Process -FilePath ${psQuote(process.execPath)}`,
-    `-ArgumentList @(${childArgs.map(psQuote).join(", ")})`,
+    `-ArgumentList @(${[...childArgs, "--elevated-child"].map(psQuote).join(", ")})`,
     "-Verb RunAs -Wait -PassThru",
     "; exit $process.ExitCode",
   ].join(" ");
@@ -740,12 +892,14 @@ async function ensureElevated() {
 async function main() {
   if (!(await ensureElevated())) return;
   console.log(`PromptSpark installer  ·  ${UNINSTALL ? "卸载" : "安装"}`);
-  if (!UNINSTALL) {
+  const targets = detectTargets();
+  const selection = await selectHosts(targets);
+  const selected = selection.selected;
+  uninstallMode = selection.uninstall;
+  if (!uninstallMode) {
     await ensureProxyRunning();
   }
-  const targets = detectTargets();
-  const selected = await selectHosts(targets);
-  const scriptBody = UNINSTALL ? null : ensureBuilt();
+  const scriptBody = uninstallMode ? null : ensureBuilt();
 
   // 顺序：关进程 → 写补丁 → 再启动
   const results = await applyPatches(selected, targets, scriptBody);
@@ -754,10 +908,13 @@ async function main() {
   }
 
   console.log("\n完成。交互：左键优化 / 再点还原 / 右键或 Alt+点击打开设置。");
-  if (!UNINSTALL) {
+  if (!uninstallMode) {
     console.log(`API 请求经本地代理 http://127.0.0.1:${PROXY_PORT}（Electron 宿主需此代理绕过 CORS）。`);
   }
   if (results.some((r) => r.error)) process.exit(1);
+  if (ELEVATED_CHILD && process.platform === "win32") {
+    await ask("\n管理员窗口已保留。按 Enter 关闭窗口：");
+  }
 }
 
 const isMain =
