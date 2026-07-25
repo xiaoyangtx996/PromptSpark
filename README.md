@@ -1,245 +1,218 @@
-# PromptSpark
-
-**提示火花** — 在 Composer 输入框旁一键优化提示词：点一下改写，再点还原；右键 / Alt+点击打开设置。
-
-[![GitHub stars](https://img.shields.io/github/stars/xiaoyangtx996/PromptSpark?style=flat-square&logo=github)](https://github.com/xiaoyangtx996/PromptSpark/stargazers)
-[![GitHub issues](https://img.shields.io/github/issues/xiaoyangtx996/PromptSpark?style=flat-square)](https://github.com/xiaoyangtx996/PromptSpark/issues)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](./LICENSE)
-
-多宿主规划中；**当前安装入口仅开放已验证的 Cursor**（Codex / Devin / Antigravity 测试通过后再开放）。
-
 <p align="center">
-  <img src="./image/ui-preview.png" alt="PromptSpark 设置界面预览" width="420" />
+  <img src="./assets/readme/hero.svg" width="100%" alt="PromptSpark：在 Cursor Composer 内一键优化、还原和管理提示词">
 </p>
 
 <p align="center">
-  <sub>设置面板：接口配置（OpenAI 兼容 / Anthropic）· 默认三风格 · 自定义风格 · 本地代理通道</sub>
+  <a href="https://github.com/xiaoyangtx996/PromptSpark/stargazers"><img src="https://img.shields.io/github/stars/xiaoyangtx996/PromptSpark?style=flat-square&logo=github&label=Stars" alt="GitHub stars"></a>
+  <a href="https://github.com/xiaoyangtx996/PromptSpark/issues"><img src="https://img.shields.io/github/issues/xiaoyangtx996/PromptSpark?style=flat-square&label=Issues" alt="GitHub issues"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-4C8DFF.svg?style=flat-square" alt="MIT License"></a>
 </p>
 
----
+PromptSpark 在 Cursor 的 Composer 输入框旁增加一个优化按钮。写好草稿后点击一次，由你配置的 LLM 改写；再次点击即可恢复原文。右键或 `Alt + 点击` 打开设置。
 
-## ✨ 功能特性
+> 当前安装入口仅开放已验证的 **Cursor for Windows**。Codex、Devin / Windsurf 与 Antigravity 仍在适配验证中。
 
-| 能力 | 说明 |
-|:---|:---|
-| 一键优化 | Composer 旁出现星星按钮，左键调用你配置的 LLM 改写当前提示词 |
-| 一键还原 | 优化后再次点击，恢复原文 |
-| 取消进行中 | 优化请求进行中再次点击可取消 |
-| 多风格 | 内置 **简洁 / 结构化 / 编程**，并支持自定义风格（可增删） |
-| 自带设置面板 | 右键或 **Alt+点击** 打开：协议、Base URL、API Key、Model、风格 |
-| 协议兼容 | OpenAI 兼容接口 / Anthropic |
-| 本地代理 | 自动拉起 `127.0.0.1:37841`，绕过 Cursor 等 Electron CORS 限制 |
-| 一键安装 | PowerShell `irm \| iex`，无需手动 clone |
+## 界面预览
 
----
+<p align="center">
+  <img src="./image/ui-preview.png" alt="PromptSpark 设置面板，包含接口、模型和提示词风格配置" width="430">
+</p>
 
-## 🖱️ 使用方式
+<p align="center"><sub>设置 OpenAI 兼容或 Anthropic 接口，选择内置风格，或维护自己的 system prompt。</sub></p>
 
-安装并重启对应应用后：
+## 能做什么
 
-1. 在聊天 / Composer 输入框写好提示词  
-2. 点击输入栏旁的 **星星** 图标 → 开始优化  
-3. 再点一次 → **还原**原文  
-4. **右键** 或 **Alt+点击** 星星 → 打开 **PromptSpark** 设置（见上方界面预览）  
+- **优化与还原**：点击优化当前提示词，再次点击恢复原文。
+- **随时取消**：请求进行中再次点击即可停止。
+- **多种风格**：内置简洁、结构化、编程三种风格，支持自定义增删。
+- **接口自选**：兼容 OpenAI 风格接口和 Anthropic API。
+- **本地代理**：自动使用 `127.0.0.1:37841`，处理 Cursor / Electron 的 CORS 限制。
+- **就地配置**：右键或 `Alt + 点击` 优化按钮，直接设置协议、Base URL、API Key、模型和风格。
 
-优化中图标会切换为旋转的刷新箭头；可再次点击取消。
+## 快速开始
 
----
+### 前置要求
 
-## 📋 前置要求
+- Windows
+- [Node.js LTS](https://nodejs.org/)
+- Cursor
+- OpenAI 兼容或 Anthropic API
 
-- **Windows**（当前一键脚本面向 Windows）
-- **[Node.js LTS](https://nodejs.org/)**（安装器与本地代理依赖 Node）
-- 已安装 **Cursor**
-- 可用的 LLM API（OpenAI 兼容或 Anthropic）
+### 一键安装
 
-> 若尚未安装 Node：打开 https://nodejs.org/ 安装 LTS，然后**重新打开**终端再执行安装命令。
-
----
-
-## 🚀 一键安装
-
-### 全球
+在系统 PowerShell 中运行：
 
 ```powershell
 irm https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/scripts/install.ps1 | iex
 ```
 
-### 国内网络（推荐镜像）
+国内网络可使用镜像：
 
 ```powershell
 irm https://wget.la/https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/scripts/install.ps1 | iex
 ```
 
-> 若怀疑镜像缓存了旧脚本，可加时间戳绕过：
->
-> ```powershell
-> irm "https://wget.la/https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/scripts/install.ps1?$(Get-Date -Format yyyyMMddHHmmss)" | iex
-> ```
+安装器会请求 UAC 管理员权限，关闭 Cursor，写入外部脚本并更新 checksum，随后重新启动 Cursor。写入遇到占用时最多重试 3 次。
 
-### 安装过程会做什么？
+安装后：
 
-1. 检测 Node.js  
-2. 将安装器缓存到 `%LOCALAPPDATA%\PromptSpark`  
-3. 交互选择要注入的应用  
-4. 写入脚本 / 修补 `workbench.html`（并更新 checksum）  
-5. 可选：自动重启已安装的应用  
+1. 在 Cursor Composer 中输入提示词。
+2. 点击输入框右侧的闪光按钮开始优化。
+3. 再次点击恢复原文；优化过程中点击则取消请求。
+4. 右键或 `Alt + 点击` 按钮，完成首次配置。
 
-### 指定应用 / 卸载
+## 首次配置
+
+| 字段 | 填写内容 |
+|:---|:---|
+| 协议 | `OpenAI 兼容` 或 `Anthropic` |
+| Base URL | 例如 `https://api.example.com/v1` |
+| API Key | 对应服务商的 API 密钥 |
+| Model | 例如 `gpt-4o-mini` 或 `claude-...` |
+| 风格 | 内置风格，或自定义名称和 system prompt |
+
+点击 **存储** 后生效。配置保存在 Cursor 的本地存储中；API 请求通过本机代理转发。
+
+## 安装与卸载
+
+指定 Cursor 或跳过自动重启：
 
 ```powershell
-# 只装 Cursor
+# 安装到 Cursor
 iex "& { $(irm https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/scripts/install.ps1) } -Hosts cursor"
 
-# 多应用且不自动重启
-iex "& { $(irm https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/scripts/install.ps1) } -Hosts cursor,codex -NoRestart"
+# 安装后不自动重启 Cursor
+iex "& { $(irm https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/scripts/install.ps1) } -Hosts cursor -NoRestart"
 
 # 卸载
 iex "& { $(irm https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/scripts/install.ps1) } -Uninstall"
 ```
 
----
+若镜像缓存了旧脚本，可附加时间戳：
 
-## ⚙️ 首次配置
+```powershell
+irm "https://wget.la/https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/scripts/install.ps1?$(Get-Date -Format yyyyMMddHHmmss)" | iex
+```
 
-打开设置面板后填写：
+## 工作方式
 
-| 字段 | 说明 |
-|:---|:---|
-| **协议** | `OpenAI 兼容` 或 `Anthropic` |
-| **Base URL** | 例如 `https://api.example.com/v1`（OpenAI 兼容建议以 `/v1` 结尾） |
-| **API Key** | 你的密钥 |
-| **Model** | 例如 `gpt-4o-mini` / `claude-...` |
-| **风格** | 默认三选一，或在「自定义」下拉中新增 |
+```text
+Composer 草稿
+      │
+      ▼
+PromptSpark 按钮 ──► 本地代理 127.0.0.1:37841 ──► 你的 LLM API
+      ▲                                                   │
+      └──────────── 优化结果写回 / 一键恢复原文 ◄─────────┘
+```
 
-点 **存储** 后生效。配置保存在浏览器/`localStorage`（键名兼容旧版）。
+Cursor 的 CSP 不允许内联脚本，因此安装器会：
 
-> Cursor 等环境下，请求会经本地代理 `http://127.0.0.1:37841` 转发，避免 CORS 失败。安装时一般会自动拉起代理；若优化报网络错误，可在缓存目录手动执行：`node proxy.mjs`。
+1. 将构建产物写为 Workbench 同目录下的 `promptspark.js`。
+2. 在 `workbench.html` 中加入同源外部脚本引用。
+3. 更新 `product.json` 中对应的 Workbench checksum。
+4. 卸载时移除引用和外部脚本。
 
----
-
-## 🧩 支持的应用
+## 支持状态
 
 | 应用 | 状态 | 说明 |
-|:---|:---|:---|
-| **Cursor** | ✅ 已开放 | 注入 `workbench.html` + 更新 `product.json` checksum |
-| **Codex** | ⏳ 待验证 | 安装入口暂未开放 |
-| **Devin / Windsurf** | ⏳ 待验证 | 安装入口暂未开放 |
-| **Antigravity** | ⏳ 待验证 | 安装入口暂未开放 |
+|:---|:---:|:---|
+| Cursor | 已开放 | Windows 安装链路已验证 |
+| Codex | 待验证 | 安装入口尚未开放 |
+| Devin / Windsurf | 待验证 | 安装入口尚未开放 |
+| Antigravity | 待验证 | 安装入口尚未开放 |
 
-当前运行 `node install.mjs` / 一键脚本时，只会安装到 **Cursor**。
+## 本地开发
 
----
-
-## 📦 本地 / 开发者安装
-
-若已 clone 本仓库，**请用系统 CMD / PowerShell**（不要在 Cursor 内置终端里跑，否则关进程会把安装一起杀掉）：
-
-```bat
-scripts\install-cursor.cmd
-```
-
-或：
+不要在 Cursor 内置终端中执行安装，因为安装器需要关闭 Cursor。请使用系统 CMD 或 PowerShell：
 
 ```powershell
-cd path\to\PromptSpark
+git clone https://github.com/xiaoyangtx996/PromptSpark.git
+cd PromptSpark
+npm install
+npm run build
 node install.mjs --hosts=cursor
 ```
 
-流程：关闭 Cursor → 写入 `workbench.html` → 自动再启动。
-
-非交互示例：
+常用命令：
 
 ```powershell
-node install.mjs --hosts=cursor
+npm run build
 node install.mjs --hosts=cursor --no-restart
 node install.mjs --uninstall
-```
-
-构建：
-
-```powershell
-node build.mjs
-# 或：构建并重装到本机 Cursor
 node scripts/rebuild-cursor.mjs
 ```
 
----
-
-## 📁 项目结构
+<details>
+<summary><strong>项目结构</strong></summary>
 
 ```text
 PromptSpark/
+├── assets/readme/           # README 视觉资源
+├── image/                   # 产品截图
 ├── scripts/
-│   ├── install.ps1          # 一键安装引导（irm | iex）
-│   ├── install-cursor.cmd   # 本地：关 Cursor → 注入 → 重启
-│   └── rebuild-cursor.mjs   # 本地构建并装到 Cursor
+│   ├── install.ps1          # 远程一键安装入口
+│   ├── install-cursor.cmd   # 本地 Cursor 安装入口
+│   └── rebuild-cursor.mjs   # 构建并重装
 ├── src/
 │   ├── prompt-optimize.codex-source.js
-│   ├── host-adapters.js     # Cursor / Devin / Antigravity 挂载
-│   ├── settings-dom.js      # 设置面板（Trusted Types 安全）
+│   ├── host-adapters.js     # 宿主检测与按钮挂载
+│   ├── settings-dom.js      # 设置面板
 │   └── theme-css.css
-├── dist/
-│   └── prompt-optimize.js   # 构建产物（安装注入用）
-├── install.mjs              # 跨应用安装器
-├── proxy.mjs                # 本地 LLM 代理（CORS）
-├── build.mjs
-└── README.md
+├── dist/prompt-optimize.js  # 构建产物
+├── install.mjs              # 安装、提权与 checksum 更新
+├── proxy.mjs                # 本地 LLM 代理
+└── build.mjs
 ```
+</details>
 
----
+## 常见问题
 
-## ❓ 常见问题
+<details>
+<summary><strong>找不到 Node.js</strong></summary>
 
-**Q: 执行 `irm | iex` 报错找不到 Node？**  
-先安装 [Node.js LTS](https://nodejs.org/)，关闭并重新打开 PowerShell 再试。
+安装 [Node.js LTS](https://nodejs.org/)，关闭并重新打开 PowerShell，然后重新执行安装命令。
+</details>
 
-**Q: 安装时提示 EPERM / operation not permitted？**  
-请用仓库里的 `scripts\install-cursor.cmd`（或系统 CMD 运行 `node install.mjs --hosts=cursor`），不要在 Cursor 内置终端执行。安装器会先关 Cursor 再写文件。
+<details>
+<summary><strong>没有出现 UAC 或安装提示权限不足</strong></summary>
 
-**Q: 安装成功但看不到星星按钮？**  
-请确认安装输出有 `✓ Cursor: installed`。冷启动后按钮在 Composer 输入框右侧（附件/麦克风旁），图标为 ✨。
+请从系统 CMD / PowerShell 运行安装器，不要使用 Cursor 内置终端。安装器会自动请求管理员权限。
+</details>
 
-**Q: 点击优化提示 Failed to fetch / CORS？**  
-确认本地代理在跑：`http://127.0.0.1:37841`。可在 `%LOCALAPPDATA%\PromptSpark` 执行 `node proxy.mjs`。
+<details>
+<summary><strong>安装成功但看不到优化按钮</strong></summary>
 
-**Q: 协议选 Anthropic 但模型是 gpt-xxx？**  
-请改用「OpenAI 兼容」，或换成 Claude 模型。保存时可能自动纠正明显不匹配的组合。
+确认输出包含 `Cursor: installed`，然后完全退出并重新打开 Cursor。按钮位于 Composer 右下角的图片和麦克风等工具附近。
+</details>
 
-**Q: 自定义风格存了再打开不见了？**  
-请使用较新版本（≥ 1.2.4）。务必点击设置里的 **存储**；仅「新增」不会落盘。
+<details>
+<summary><strong>提示 Failed to fetch 或 CORS</strong></summary>
 
-**Q: 如何卸载？**  
-```powershell
-iex "& { $(irm https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/scripts/install.ps1) } -Uninstall"
-```
-或本地：`node install.mjs --uninstall`
+检查 `http://127.0.0.1:37841/health`。本地安装可在仓库目录执行 `node proxy.mjs`；远程安装可在 `%LOCALAPPDATA%\PromptSpark` 中执行相同命令。
+</details>
 
-**Q: macOS / Linux？**  
-当前一键脚本以 Windows 为主；欢迎 Issue / PR 补充 shell 引导脚本。
+<details>
+<summary><strong>自定义风格保存后消失</strong></summary>
 
----
+新增风格后仍需点击设置面板底部的 **存储**，才会写入本地存储。
+</details>
 
-## 🔒 安全说明
+## 安全说明
 
-- 安装器会修改目标**原生应用**的 `workbench.html`（并尽量更新 `product.json` checksum）  
-- API Key 仅保存在本机设置存储中，不会上传到本仓库  
-- 请从本仓库官方地址获取安装脚本，勿运行来源不明的拷贝  
-- 使用第三方 API 时请遵守对应服务商条款  
+- 安装器会修改 Cursor 的 `workbench.html`，写入 `promptspark.js`，并更新 `product.json` checksum。
+- API Key 仅保存在本机 Cursor 设置存储中，不会提交到本仓库。
+- 本地代理只监听 `127.0.0.1:37841`。
+- 请仅从本仓库官方地址获取安装脚本，并遵守所用 API 服务商条款。
 
----
+## 反馈与贡献
 
-## 💬 反馈
+- Bug 或需求请提交 [Issue](https://github.com/xiaoyangtx996/PromptSpark/issues)。
+- 欢迎通过 Pull Request 改进宿主适配、安装体验和文档。
 
-- Bug / 需求：提交 [Issues](https://github.com/xiaoyangtx996/PromptSpark/issues)  
-- 欢迎 PR：改进安装体验、宿主适配、文档与动效  
+## License
 
----
+PromptSpark 使用 [MIT License](./LICENSE)。
 
-## 📄 License
-
-本项目采用 [MIT](./LICENSE) 开源协议。
-
-友链： [LINUX DO 社区](https://linux.do)。
+友链：[LINUX DO 社区](https://linux.do)。
 
 © PromptSpark contributors

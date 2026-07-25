@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">PromptSpark</title>
+  <desc id="desc">在 Cursor Composer 内一键优化、还原和管理提示词。</desc>
+  <rect width="1200" height="360" rx="8" fill="#111315"/>
+  <path d="M0 312H1200" stroke="#30343A"/>
+
+  <g id="title-block" transform="translate(58 56)" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif">
+    <text x="0" y="0" fill="#9AA1AA" font-size="18" font-weight="600">CURSOR PROMPT OPTIMIZER</text>
+    <text x="0" y="76" fill="#F7F8FA" font-size="66" font-weight="750">PromptSpark</text>
+    <text x="0" y="126" fill="#FFB000" font-size="26" font-weight="650">点一下优化，再点一下还原。</text>
+    <text x="0" y="174" fill="#C7CBD1" font-size="21">OpenAI 兼容 / Anthropic · 多风格 · 本地代理</text>
+  </g>
+
+  <g id="prompt-flow" transform="translate(660 44)" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif">
+    <rect width="484" height="222" rx="8" fill="#191C20" stroke="#3A3F46"/>
+    <text x="24" y="36" fill="#9AA1AA" font-size="18">COMPOSER</text>
+    <rect x="24" y="54" width="436" height="58" rx="8" fill="#24282D"/>
+    <text x="42" y="89" fill="#C7CBD1" font-size="20">帮我优化这个功能描述</text>
+
+    <path d="M58 146H188" stroke="#5E6670" stroke-width="2"/>
+    <path d="M296 146H426" stroke="#4C8DFF" stroke-width="2"/>
+    <circle cx="242" cy="146" r="28" fill="#FFB000"/>
+    <path d="M242 127L247 140L261 146L247 151L242 165L237 151L223 146L237 140Z" fill="#111315"/>
+    <text x="24" y="192" fill="#7F8791" font-size="18">草稿</text>
+    <text x="334" y="192" fill="#76A7FF" font-size="18">结构化结果</text>
+
+    <g transform="translate(0 244)" font-family="ui-monospace,SFMono-Regular,Consolas,monospace" font-size="17">
+      <text x="0" y="0" fill="#FFB000">01</text><text x="34" y="0" fill="#C7CBD1">WRITE</text>
+      <text x="146" y="0" fill="#FFB000">02</text><text x="180" y="0" fill="#C7CBD1">SPARK</text>
+      <text x="304" y="0" fill="#4C8DFF">03</text><text x="338" y="0" fill="#F7F8FA">USE</text>
+    </g>
+  </g>
+
+  <g transform="translate(58 334)" font-family="ui-monospace,SFMono-Regular,Consolas,monospace" font-size="16">
+    <text fill="#7F8791">WINDOWS · CURSOR · MIT</text>
+  </g>
+</svg>

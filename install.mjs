@@ -25,6 +25,7 @@ const PATCH_BEGIN = "<!-- PROMPTSPARK-PATCH -->";
 const PATCH_END = "<!-- /PROMPTSPARK-PATCH -->";
 const LEGACY_PATCH_BEGIN = "<!-- PROMPT-OPTIMIZE-PATCH -->";
 const LEGACY_PATCH_END = "<!-- /PROMPT-OPTIMIZE-PATCH -->";
+const PATCH_ASSET = "promptspark.js";
 
 const args = process.argv.slice(2);
 const UNINSTALL = args.includes("--uninstall");
@@ -431,13 +432,12 @@ function updateProductChecksum(productJsonPath, checksumKey, workbenchPath) {
   return true;
 }
 
-function wrapWorkbenchPatch(scriptBody) {
-  // Escape </script> in body
-  const safe = scriptBody.replace(/<\/script/gi, "<\\/script");
-  return `\n${PATCH_BEGIN}\n<script>\n${safe}\n</script>\n${PATCH_END}\n`;
+function wrapWorkbenchPatch() {
+  return `\n${PATCH_BEGIN}\n<script src="./${PATCH_ASSET}"></script>\n${PATCH_END}\n`;
 }
 
 function patchWorkbench(workbenchPath, scriptBody, uninstall = false) {
+  const assetPath = path.join(path.dirname(workbenchPath), PATCH_ASSET);
   let html = fs.readFileSync(workbenchPath, "utf8");
   const strip = (begin, end) => {
     const re = new RegExp(`${escapeRe(begin)}[\\s\\S]*?${escapeRe(end)}\\n?`, "g");
@@ -447,9 +447,11 @@ function patchWorkbench(workbenchPath, scriptBody, uninstall = false) {
   strip(LEGACY_PATCH_BEGIN, LEGACY_PATCH_END);
   if (uninstall) {
     fs.writeFileSync(workbenchPath, html, "utf8");
+    fs.rmSync(assetPath, { force: true });
     return { changed: true, action: "removed" };
   }
-  const patch = wrapWorkbenchPatch(scriptBody);
+  fs.writeFileSync(assetPath, scriptBody, "utf8");
+  const patch = wrapWorkbenchPatch();
   if (html.includes("</html>")) {
     html = html.replace(/<\/html>\s*$/i, `${patch}</html>\n`);
   } else {
@@ -505,7 +507,7 @@ function collectProcessNames(selected, targets) {
   return [...new Set(selected.flatMap((id) => targets[id]?.restart?.processNames || []))];
 }
 
-async function withWriteRetry(fn, retries = 12) {
+async function withWriteRetry(fn, retries = 3) {
   let last;
   for (let i = 0; i < retries; i++) {
     try {
@@ -517,6 +519,9 @@ async function withWriteRetry(fn, retries = 12) {
       console.log(`  写入重试 ${i + 1}/${retries}…`);
       await sleep(400 + i * 200);
     }
+  }
+  if (last?.code === "EACCES") {
+    throw new Error("管理员进程仍没有目标文件的写入权限。", { cause: last });
   }
   throw last;
 }
@@ -693,7 +698,47 @@ async function relaunchHosts(selected, targets) {
   }
 }
 
+function isElevated() {
+  if (process.platform !== "win32") return true;
+  try {
+    const output = execSync(
+      "powershell.exe -NoProfile -NonInteractive -Command \"([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)\"",
+      { encoding: "utf8", windowsHide: true },
+    );
+    return output.trim().toLowerCase() === "true";
+  } catch {
+    return false;
+  }
+}
+
+function psQuote(value) {
+  return `'${String(value).replaceAll("'", "''")}'`;
+}
+
+async function ensureElevated() {
+  if (isElevated()) return true;
+  console.log("正在请求管理员权限…");
+  const childArgs = [fileURLToPath(import.meta.url), ...process.argv.slice(2)];
+  const command = [
+    `$process = Start-Process -FilePath ${psQuote(process.execPath)}`,
+    `-ArgumentList @(${childArgs.map(psQuote).join(", ")})`,
+    "-Verb RunAs -Wait -PassThru",
+    "; exit $process.ExitCode",
+  ].join(" ");
+  const exitCode = await new Promise((resolve) => {
+    const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], {
+      stdio: "inherit",
+      windowsHide: true,
+    });
+    child.on("error", () => resolve(1));
+    child.on("exit", (code) => resolve(code ?? 1));
+  });
+  process.exitCode = exitCode;
+  return false;
+}
+
 async function main() {
+  if (!(await ensureElevated())) return;
   console.log(`PromptSpark installer  ·  ${UNINSTALL ? "卸载" : "安装"}`);
   if (!UNINSTALL) {
     await ensureProxyRunning();
