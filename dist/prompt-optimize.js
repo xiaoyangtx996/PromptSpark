@@ -2686,6 +2686,8 @@ author: PromptSpark
   }
 
   const LOCAL_PROXY = "http://127.0.0.1:37841";
+  const PROXY_WAKE_URL = "promptspark://ensure-proxy";
+  let proxyWakeAt = 0;
 
   function hasNativeFetch() {
     return typeof fetch === "function";
@@ -2693,6 +2695,49 @@ author: PromptSpark
 
   function hasRequestTransport() {
     return hasCodexPlusBridge() || hasElectronFetchBridge() || hasNativeFetch();
+  }
+
+  function wakeLocalProxy() {
+    const now = Date.now();
+    if (now - proxyWakeAt < 4000) return;
+    proxyWakeAt = now;
+    try {
+      const iframe = document.createElement("iframe");
+      iframe.style.cssText = "display:none;width:0;height:0;border:0;position:absolute";
+      iframe.src = PROXY_WAKE_URL;
+      document.documentElement.appendChild(iframe);
+      window.setTimeout(() => {
+        try { iframe.remove(); } catch (_) { /* ignore */ }
+      }, 4000);
+    } catch (error) {
+      debugLog("wakeLocalProxy iframe failed", error?.message || error);
+    }
+    try {
+      const a = document.createElement("a");
+      a.href = PROXY_WAKE_URL;
+      a.rel = "noopener";
+      a.style.display = "none";
+      document.documentElement.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (_) { /* ignore */ }
+    try {
+      if (typeof window.electronBridge?.openExternal === "function") {
+        window.electronBridge.openExternal(PROXY_WAKE_URL);
+      }
+    } catch (_) { /* ignore */ }
+  }
+
+  async function waitLocalProxy(timeoutMs = 2500) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      try {
+        const res = await fetch(LOCAL_PROXY + "/health", { signal: AbortSignal.timeout(500) });
+        if (res.ok) return true;
+      } catch (_) { /* retry */ }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    return false;
   }
 
   async function localProxyFetchJson({ upstreamUrl, method, headers, body, signal }) {
@@ -2712,12 +2757,38 @@ author: PromptSpark
         signal,
       });
     } catch (error) {
-      const err = new Error(
-        "本地代理未运行。请重新执行 install.mjs，或运行: node proxy.mjs",
-      );
-      err.code = "CPO_PROXY_DOWN";
-      err.cause = error;
-      throw err;
+      wakeLocalProxy();
+      const recovered = await waitLocalProxy(3000);
+      if (recovered) {
+        try {
+          res = await fetch(LOCAL_PROXY + "/proxy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              url: upstream,
+              method: method || "POST",
+              headers: headers || {},
+              body: body == null ? null : typeof body === "string" ? body : JSON.stringify(body),
+              timeout_ms: REQUEST_TIMEOUT_MS,
+            }),
+            signal,
+          });
+        } catch (retryErr) {
+          const err = new Error(
+          "本地代理未运行。请重启 Cursor/Codex，或运行: node ensure-proxy.mjs",
+        );
+          err.code = "CPO_PROXY_DOWN";
+          err.cause = retryErr;
+          throw err;
+        }
+      } else {
+        const err = new Error(
+          "本地代理未运行。请重启 Cursor/Codex，或运行: node ensure-proxy.mjs",
+        );
+        err.code = "CPO_PROXY_DOWN";
+        err.cause = error;
+        throw err;
+      }
     }
     const envelope = await res.json().catch(() => ({}));
     if (envelope?.error && envelope?.status == null && envelope?.ok === false) {
@@ -3637,7 +3708,7 @@ author: PromptSpark
         warnEl,
         cpoEl("p", {
           className: "cpo-footnote",
-          text: `通道 ${typeof HOST === "string" ? HOST : "auto"} · 本地代理 127.0.0.1:37841`,
+          text: `通道 ${typeof HOST === "string" ? HOST : "auto"} · 本地代理随宿主启动 · 127.0.0.1:37841`,
         }),
       ]),
       cpoEl("section", { className: "cpo-block" }, [
@@ -3991,6 +4062,14 @@ author: PromptSpark
     ensureSparkleButton();
     window[API_KEY] = api;
     console.info(DEBUG_PREFIX, `loaded v${SCRIPT_VERSION} host=${HOST}`);
+    // When user plugin/script loads (Cursor extension / Codex++ user_scripts), wake local proxy.
+    (async () => {
+      try {
+        if (await waitLocalProxy(500)) return;
+        wakeLocalProxy();
+        await waitLocalProxy(3500);
+      } catch (_) { /* ignore */ }
+    })();
     [300, 1000, 2500, 5000, 10000].forEach((ms) => {
       window.setTimeout(() => {
         if (!runtime.disposed) {

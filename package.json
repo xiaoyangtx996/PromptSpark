@@ -1,8 +1,8 @@
 {
   "name": "promptspark",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "private": true,
-  "description": "PromptSpark — multi-host prompt optimizer for native Codex / Cursor / Devin / Antigravity",
+  "description": "PromptSpark — Cursor Composer prompt optimizer (Windows). Codex users: use Codex++.",
   "type": "module",
   "bin": {
     "promptspark": "./install.mjs",
@@ -10,7 +10,10 @@
   },
   "scripts": {
     "build": "node build.mjs",
+    "proxy": "node proxy.mjs",
+    "ensure-proxy": "node ensure-proxy.mjs",
     "codex-runtime": "node codex-runtime.mjs",
+    "cursor-runtime": "node cursor-runtime.mjs",
     "install:hosts": "node install.mjs",
     "uninstall": "node install.mjs --uninstall"
   }

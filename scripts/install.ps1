@@ -110,7 +110,15 @@ function Sync-Installer {
 
   Download-File "install.mjs" (Join-Path $InstallDir "install.mjs")
   Download-File "proxy.mjs" (Join-Path $InstallDir "proxy.mjs")
+  Download-File "ensure-proxy.mjs" (Join-Path $InstallDir "ensure-proxy.mjs")
+  Download-File "cursor-runtime.mjs" (Join-Path $InstallDir "cursor-runtime.mjs")
+  Download-File "codex-runtime.mjs" (Join-Path $InstallDir "codex-runtime.mjs")
   Download-File "dist/prompt-optimize.js" (Join-Path $InstallDir "dist\prompt-optimize.js")
+
+  $extDir = Join-Path $InstallDir "cursor-extension"
+  New-Item -ItemType Directory -Path $extDir -Force | Out-Null
+  Download-File "cursor-extension/package.json" (Join-Path $extDir "package.json")
+  Download-File "cursor-extension/extension.js" (Join-Path $extDir "extension.js")
 
   # optional helpers (best-effort)
   Try-Download -Url "$RawBase/package.json" -OutFile (Join-Path $InstallDir "package.json") | Out-Null

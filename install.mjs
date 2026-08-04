@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * PromptSpark installer
- * Interactive install into Cursor (other hosts gated until verified)
+ * Interactive install into Cursor (Windows)
  *
  * Usage:
  *   node install.mjs
@@ -15,17 +15,27 @@ import crypto from "node:crypto";
 import { spawn, execSync } from "node:child_process";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
+import { ensureProxyRunning as ensureProxyRunningShared } from "./ensure-proxy.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
 const DIST = path.join(ROOT, "dist", "prompt-optimize.js");
 const PROXY_JS = path.join(ROOT, "proxy.mjs");
+const ENSURE_PROXY_JS = path.join(ROOT, "ensure-proxy.mjs");
+const CURSOR_RUNTIME_JS = path.join(ROOT, "cursor-runtime.mjs");
+const CODEX_RUNTIME_JS = path.join(ROOT, "codex-runtime.mjs");
 const PROXY_PORT = 37841;
+const PROTOCOL_SCHEME = "promptspark";
 const PATCH_BEGIN = "<!-- PROMPTSPARK-PATCH -->";
 const PATCH_END = "<!-- /PROMPTSPARK-PATCH -->";
 const LEGACY_PATCH_BEGIN = "<!-- PROMPT-OPTIMIZE-PATCH -->";
 const LEGACY_PATCH_END = "<!-- /PROMPT-OPTIMIZE-PATCH -->";
 const PATCH_ASSET = "promptspark.js";
+
+function promptSparkDataRoot() {
+  const { localAppData, home } = winEnvPaths();
+  return path.join(localAppData || path.join(home, "AppData", "Local"), "PromptSpark");
+}
 
 const args = process.argv.slice(2);
 const UNINSTALL = args.includes("--uninstall");
@@ -42,10 +52,11 @@ const FORCE_HOSTS = hostsArg
   : null;
 
 /**
- * 当前对外安装入口只开放已验证宿主。
- * 其它宿主检测逻辑保留，待测试通过后再加入此列表。
+ * PromptSpark 安装入口仅开放 Cursor。
+ * Codex 提示词优化已迁入 Codex++ 内置用户脚本，请使用 Codex++。
+ * Devin / Antigravity 检测逻辑保留，待验证后再开放。
  */
-const ENABLED_HOST_IDS = new Set(["cursor", "codex"]);
+const ENABLED_HOST_IDS = new Set(["cursor"]);
 
 function exists(p) {
   try {
@@ -381,7 +392,7 @@ function detectTargets() {
       scriptPaths: codexScriptPaths,
       restart: {
         processNames: ["Codex", "ChatGPT"],
-        launch: codexScriptPaths.host,
+        launch: codexExe,
       },
     },
     cursor: {
@@ -392,6 +403,7 @@ function detectTargets() {
       workbench: cursorWb.workbench,
       productJson: cursorWb.productJson,
       checksumKey: cursorWb.checksumKey || "vs/code/electron-sandbox/workbench/workbench.html",
+      scriptPaths: cursorLauncherPaths(),
       restart: {
         processNames: ["Cursor"],
         launch: cursorExe,
@@ -426,66 +438,463 @@ function detectTargets() {
     },
   };
   for (const target of Object.values(targets)) {
-    target.installed = target.id === "codex"
-      ? exists(codexScriptPaths.script)
-      : !!(target.workbench && exists(target.workbench) &&
-      (exists(path.join(path.dirname(target.workbench), PATCH_ASSET)) ||
-        fs.readFileSync(target.workbench, "utf8").includes(PATCH_BEGIN)));
+    if (target.id === "codex") {
+      target.installed = exists(codexPlusUserScriptPaths().script) || exists(codexScriptPaths.script);
+    } else {
+      target.installed = !!(target.workbench && exists(target.workbench) &&
+        (exists(path.join(path.dirname(target.workbench), PATCH_ASSET)) ||
+          fs.readFileSync(target.workbench, "utf8").includes(PATCH_BEGIN)));
+    }
   }
   return targets;
 }
 
 function codexPlusPlusPaths() {
-  const root = path.join(process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || "", "AppData", "Local"), "PromptSpark", "codex");
+  const root = path.join(promptSparkDataRoot(), "codex");
   return {
     root,
     scripts: root,
     registry: path.join(root, "promptspark-codex.json"),
     script: path.join(root, "promptspark-codex.js"),
     host: path.join(root, "promptspark-codex-host.js"),
+    runtime: path.join(root, "promptspark-codex-runtime.mjs"),
+    ensureProxy: path.join(root, "ensure-proxy.mjs"),
+    proxy: path.join(root, "proxy.mjs"),
+  };
+}
+
+function cursorLauncherPaths() {
+  const root = path.join(promptSparkDataRoot(), "cursor");
+  return {
+    root,
+    registry: path.join(root, "promptspark-cursor.json"),
+    host: path.join(root, "promptspark-cursor-host.js"),
+    runtime: path.join(root, "cursor-runtime.mjs"),
+    ensureProxy: path.join(root, "ensure-proxy.mjs"),
+    proxy: path.join(root, "proxy.mjs"),
+    shortcutBackup: path.join(root, "shortcut-backup.json"),
+  };
+}
+
+function codexPlusUserScriptPaths() {
+  const root = path.join(process.env.APPDATA || path.join(winEnvPaths().home, "AppData", "Roaming"), "Codex++");
+  return {
+    root,
+    scriptsDir: path.join(root, "user_scripts"),
+    registry: path.join(root, "user_scripts.json"),
+    script: path.join(root, "user_scripts", "market-promptspark.js"),
+    scriptKey: "user:market-promptspark.js",
+    marketId: "prompt-optimize",
   };
 }
 
 function hasCodexPlusPlusRuntime() {
-  const paths = codexPlusPlusPaths();
-  return exists(paths.script) && exists(paths.host);
+  return exists(codexPlusUserScriptPaths().script) || exists(codexPlusPlusPaths().script);
+}
+
+function deployRuntimeFiles(destDir) {
+  fs.mkdirSync(destDir, { recursive: true });
+  const copies = [
+    [PROXY_JS, path.join(destDir, "proxy.mjs")],
+    [ENSURE_PROXY_JS, path.join(destDir, "ensure-proxy.mjs")],
+  ];
+  for (const [src, dest] of copies) {
+    if (!exists(src)) throw new Error(`缺少运行时文件: ${src}`);
+    fs.copyFileSync(src, dest);
+  }
+}
+
+function writeWshHost(hostPath, command) {
+  const host = `var sh = new ActiveXObject("WScript.Shell");\r\nsh.Run(${JSON.stringify(command)}, 0, false);\r\n`;
+  fs.writeFileSync(hostPath, host, "utf8");
+}
+
+function psQuote(value) {
+  return `'${String(value).replaceAll("'", "''")}'`;
+}
+
+function writePs1File(filePath, content) {
+  // PowerShell 5.1 defaults to ANSI when reading .ps1 without BOM; Chinese paths break.
+  fs.writeFileSync(filePath, `\uFEFF${content}`, "utf8");
+}
+
+function runPs1File(filePath) {
+  try {
+    return execSync(
+      `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${filePath}"`,
+      { windowsHide: true, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+    );
+  } catch (error) {
+    const stderr = String(error?.stderr || "").trim();
+    const stdout = String(error?.stdout || "").trim();
+    const detail = stderr || stdout || error?.message || String(error);
+    const short = detail.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)[0] || "PowerShell failed";
+    const err = new Error(short);
+    err.cause = error;
+    throw err;
+  }
+}
+
+function readPowerShellText(command) {
+  const tmp = path.join(
+    process.env.TEMP || process.env.TMP || promptSparkDataRoot(),
+    `promptspark-ps-${process.pid}-${Date.now()}.txt`,
+  );
+  const ps = `
+$ErrorActionPreference = 'Stop'
+$value = & { ${command} }
+[System.IO.File]::WriteAllText(${psQuote(tmp)}, [string]$value, (New-Object System.Text.UTF8Encoding $false))
+`;
+  const psFile = `${tmp}.ps1`;
+  try {
+    writePs1File(psFile, ps);
+    runPs1File(psFile);
+    return fs.readFileSync(tmp, "utf8").replace(/^\uFEFF/, "").trim();
+  } finally {
+    fs.rmSync(psFile, { force: true });
+    fs.rmSync(tmp, { force: true });
+  }
+}
+
+function sharedProxyPaths() {
+  const root = promptSparkDataRoot();
+  return {
+    root,
+    proxy: path.join(root, "proxy.mjs"),
+    ensureProxy: path.join(root, "ensure-proxy.mjs"),
+  };
+}
+
+function deploySharedProxyRuntime() {
+  const shared = sharedProxyPaths();
+  deployRuntimeFiles(shared.root);
+  return shared;
+}
+
+function registerSharedProtocolHandler() {
+  const shared = deploySharedProxyRuntime();
+  registerProtocolHandler(shared.ensureProxy);
+}
+
+function refreshProtocolAfterHostChange() {
+  const cursorExt = cursorExtensionPaths();
+  const cursorOk = exists(path.join(cursorExt.dir, "extension.js"));
+  const codexOk = exists(codexPlusUserScriptPaths().script);
+  if (cursorOk || codexOk) {
+    registerSharedProtocolHandler();
+  } else {
+    unregisterProtocolHandler();
+  }
+}
+
+function registerProtocolHandler(ensureProxyPath) {
+  if (process.platform !== "win32") return;
+  const command = `"${process.execPath}" "${ensureProxyPath}"`;
+  const dir = path.dirname(ensureProxyPath);
+  fs.mkdirSync(dir, { recursive: true });
+  const psFile = path.join(dir, `.register-protocol-${Date.now()}.ps1`);
+  const ps = `
+$ErrorActionPreference = 'Stop'
+$key = 'HKCU:\\Software\\Classes\\${PROTOCOL_SCHEME}'
+New-Item -Path $key -Force | Out-Null
+Set-ItemProperty -Path $key -Name '(default)' -Value 'URL:PromptSpark Protocol'
+New-ItemProperty -Path $key -Name 'URL Protocol' -Value '' -PropertyType String -Force | Out-Null
+$cmdKey = Join-Path $key 'shell\\open\\command'
+New-Item -Path $cmdKey -Force | Out-Null
+Set-ItemProperty -Path $cmdKey -Name '(default)' -Value ${psQuote(command)}
+`;
+  try {
+    writePs1File(psFile, ps);
+    runPs1File(psFile);
+    console.log(`✓ 已注册协议 ${PROTOCOL_SCHEME}:// → ${ensureProxyPath}`);
+  } catch (error) {
+    console.warn(`协议注册失败（可忽略）: ${error.message}`);
+  } finally {
+    fs.rmSync(psFile, { force: true });
+  }
+}
+
+function unregisterProtocolHandler() {
+  if (process.platform !== "win32") return;
+  try {
+    execSync(
+      `powershell.exe -NoProfile -NonInteractive -Command "Remove-Item -Path 'HKCU:\\Software\\Classes\\${PROTOCOL_SCHEME}' -Recurse -Force -ErrorAction SilentlyContinue"`,
+      { windowsHide: true },
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+function restoreCursorShortcuts(backupPath) {
+  if (!exists(backupPath)) return 0;
+  let backups = [];
+  try {
+    backups = JSON.parse(fs.readFileSync(backupPath, "utf8"));
+  } catch {
+    return 0;
+  }
+  let restored = 0;
+  for (const item of backups) {
+    if (!item?.path || !exists(item.path)) continue;
+    const psFile = path.join(promptSparkDataRoot(), `.restore-shortcut-${Date.now()}-${restored}.ps1`);
+    const ps = `
+$ErrorActionPreference = 'Stop'
+$s = (New-Object -ComObject WScript.Shell).CreateShortcut(${psQuote(item.path)})
+$s.TargetPath = ${psQuote(item.targetPath || "")}
+$s.Arguments = ${psQuote(item.arguments || "")}
+$s.WorkingDirectory = ${psQuote(item.workingDirectory || "")}
+$s.IconLocation = ${psQuote(item.iconLocation || "")}
+$s.Save()
+`;
+    try {
+      writePs1File(psFile, ps);
+      runPs1File(psFile);
+      restored += 1;
+    } catch (error) {
+      console.warn(`快捷方式还原失败 (${path.basename(item.path)}): ${error.message}`);
+    } finally {
+      fs.rmSync(psFile, { force: true });
+    }
+  }
+  fs.rmSync(backupPath, { force: true });
+  if (restored) console.log(`✓ 已还原 ${restored} 个 Cursor 快捷方式`);
+  return restored;
+}
+
+function cursorExtensionPaths() {
+  const home = process.env.USERPROFILE || winEnvPaths().home;
+  const root = path.join(home, ".cursor", "extensions");
+  const folderName = "promptspark.promptspark-proxy-1.3.0";
+  return {
+    root,
+    dir: path.join(root, folderName),
+    folderName,
+    extensionsJson: path.join(root, "extensions.json"),
+    id: "promptspark.promptspark-proxy",
+    version: "1.3.0",
+  };
+}
+
+function logStep(message) {
+  console.log(message);
+  try {
+    if (typeof process.stdout?.write === "function") process.stdout.write("");
+  } catch {
+    /* ignore */
+  }
+}
+
+function installCursorProxyExtension(proxyPaths, uninstall = false) {
+  const ext = cursorExtensionPaths();
+  const srcDir = path.join(ROOT, "cursor-extension");
+  if (uninstall) {
+    fs.rmSync(ext.dir, { recursive: true, force: true });
+    // Remove older versions if any
+    if (exists(ext.root)) {
+      for (const name of fs.readdirSync(ext.root)) {
+        if (/^promptspark\.promptspark-proxy-/i.test(name)) {
+          fs.rmSync(path.join(ext.root, name), { recursive: true, force: true });
+        }
+      }
+    }
+    updateExtensionsJson(ext, null);
+    logStep("✓ 已移除 Cursor 代理扩展");
+    return { changed: true, action: "removed", path: ext.dir };
+  }
+  if (!exists(path.join(srcDir, "extension.js")) || !exists(path.join(srcDir, "package.json"))) {
+    throw new Error("缺少 cursor-extension/ 源文件");
+  }
+  const shared = deploySharedProxyRuntime();
+  fs.mkdirSync(ext.dir, { recursive: true });
+  fs.copyFileSync(path.join(srcDir, "package.json"), path.join(ext.dir, "package.json"));
+  fs.copyFileSync(path.join(srcDir, "extension.js"), path.join(ext.dir, "extension.js"));
+  fs.writeFileSync(
+    path.join(ext.dir, "proxy-config.json"),
+    JSON.stringify(
+      {
+        node: process.execPath,
+        ensureProxy: shared.ensureProxy,
+        proxy: shared.proxy,
+        root: shared.root,
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+  updateExtensionsJson(ext, {
+    identifier: { id: ext.id },
+    version: ext.version,
+    location: {
+      $mid: 1,
+      fsPath: ext.dir,
+      _sep: 1,
+      external: "file:///" + ext.dir.replace(/\\/g, "/").replace(/^([A-Za-z]):/, "$1%3A"),
+      path: "/" + ext.dir.replace(/\\/g, "/").replace(/^([A-Za-z]):/, "$1:"),
+      scheme: "file",
+    },
+    relativeLocation: ext.folderName,
+    metadata: {
+      isApplicationScoped: false,
+      installedTimestamp: Date.now(),
+      pinned: true,
+      source: "vsix",
+    },
+  });
+  logStep(`✓ 已安装 Cursor 代理扩展（随 Cursor 启动）→ ${ext.dir}`);
+  return { changed: true, action: "installed", path: ext.dir };
+}
+
+function updateExtensionsJson(ext, entryOrNull) {
+  fs.mkdirSync(ext.root, { recursive: true });
+  let list = [];
+  if (exists(ext.extensionsJson)) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(ext.extensionsJson, "utf8"));
+      list = Array.isArray(raw) ? raw : [];
+    } catch {
+      list = [];
+    }
+  }
+  list = list.filter((item) => {
+    const id = item?.identifier?.id || "";
+    return id !== ext.id && !String(id).startsWith("promptspark.promptspark-proxy");
+  });
+  if (entryOrNull) list.push(entryOrNull);
+  fs.writeFileSync(ext.extensionsJson, JSON.stringify(list), "utf8");
+}
+
+function updateCursorLauncher(uninstall = false, cursorExe = "") {
+  const paths = cursorLauncherPaths();
+  fs.mkdirSync(paths.root, { recursive: true });
+  if (uninstall) {
+    // Undo any previous shortcut retarget from older installs.
+    try { restoreCursorShortcuts(paths.shortcutBackup); } catch { /* ignore */ }
+    installCursorProxyExtension(paths, true);
+    fs.rmSync(paths.host, { force: true });
+    fs.rmSync(paths.registry, { force: true });
+    fs.rmSync(paths.runtime, { force: true });
+    fs.rmSync(paths.ensureProxy, { force: true });
+    fs.rmSync(paths.proxy, { force: true });
+    try { fs.rmSync(path.join(desktopPath(), "PromptSpark Cursor.lnk"), { force: true }); } catch { /* ignore */ }
+    return { changed: true, action: "removed", path: paths.root };
+  }
+  if (!cursorExe) throw new Error("未找到 Cursor.exe");
+  logStep("部署本地代理运行时 …");
+  deployRuntimeFiles(paths.root);
+  if (exists(CURSOR_RUNTIME_JS)) {
+    fs.copyFileSync(CURSOR_RUNTIME_JS, paths.runtime);
+  }
+  if (exists(ENSURE_PROXY_JS)) {
+    fs.copyFileSync(ENSURE_PROXY_JS, paths.ensureProxy);
+  }
+  fs.writeFileSync(
+    paths.registry,
+    JSON.stringify({ exe: cursorExe, proxy: paths.proxy }, null, 2),
+    "utf8",
+  );
+  // Optional manual launcher (not required for normal Cursor.exe start).
+  if (exists(CURSOR_RUNTIME_JS)) {
+    const command = `"${process.execPath}" "${paths.runtime}" "${paths.registry}"`;
+    writeWshHost(paths.host, command);
+  }
+  logStep("安装 Cursor 扩展以随进程启动代理 …");
+  installCursorProxyExtension(paths, false);
+  // Restore shortcuts if a previous version rewrote them; do NOT retarget again.
+  if (exists(paths.shortcutBackup)) {
+    logStep("还原此前改写的 Cursor 快捷方式 …");
+    restoreCursorShortcuts(paths.shortcutBackup);
+  }
+  registerSharedProtocolHandler();
+  return { changed: true, action: "installed", path: paths.root };
+}
+
+function updateCodexUserScriptsRegistry(uninstall = false) {
+  const paths = codexPlusUserScriptPaths();
+  let data = { enabled: true, scripts: {}, market: {} };
+  if (exists(paths.registry)) {
+    try {
+      data = { ...data, ...JSON.parse(fs.readFileSync(paths.registry, "utf8")) };
+      if (!data.scripts || typeof data.scripts !== "object") data.scripts = {};
+      if (!data.market || typeof data.market !== "object") data.market = {};
+    } catch {
+      /* reset malformed */
+    }
+  }
+  if (uninstall) {
+    delete data.scripts[paths.scriptKey];
+    delete data.market[paths.scriptKey];
+  } else {
+    data.enabled = true;
+    data.scripts[paths.scriptKey] = true;
+    data.market[paths.scriptKey] = {
+      ...(data.market[paths.scriptKey] || {}),
+      id: paths.marketId,
+      name: "PromptSpark",
+      version: "1.3.1",
+      script_url: "",
+      homepage: "",
+      installed_at: String(Date.now()),
+    };
+  }
+  fs.mkdirSync(paths.root, { recursive: true });
+  fs.writeFileSync(paths.registry, JSON.stringify(data, null, 2) + "\n", "utf8");
 }
 
 function updateCodexPlusPlusScript(scriptBody, uninstall = false, codexExe = "") {
   const paths = codexPlusPlusPaths();
+  const userPaths = codexPlusUserScriptPaths();
   fs.mkdirSync(paths.root, { recursive: true });
-  let data = { enabled: true, name: "PromptSpark Codex Host", version: "1.3.0" };
+  let data = { enabled: true, name: "PromptSpark Codex", version: "1.3.1" };
   if (exists(paths.registry)) {
     try { data = { ...data, ...JSON.parse(fs.readFileSync(paths.registry, "utf8")) }; } catch { /* reset malformed registry */ }
   }
+
   if (uninstall) {
     fs.rmSync(paths.script, { force: true });
     fs.rmSync(paths.host, { force: true });
     fs.rmSync(paths.registry, { force: true });
-    fs.rmSync(path.join(desktopPath(), "PromptSpark Codex.lnk"), { force: true });
-  } else {
-    fs.writeFileSync(paths.script, scriptBody, "utf8");
-    const runtimePath = path.join(paths.root, "promptspark-codex-runtime.mjs");
-    fs.writeFileSync(paths.registry, JSON.stringify({ exe: codexExe, script: paths.script }, null, 2), "utf8");
-    fs.copyFileSync(path.join(ROOT, "codex-runtime.mjs"), runtimePath);
-    const command = `"${process.execPath}" "${runtimePath}" "${paths.registry}"`;
-    const host = `var sh = new ActiveXObject("WScript.Shell");\r\nsh.Run(${JSON.stringify(command)}, 0, false);\r\n`;
-    fs.writeFileSync(paths.host, host, "utf8");
-    const shortcut = path.join(desktopPath(), "PromptSpark Codex.lnk");
-    const psq = (value) => `'${String(value).replaceAll("'", "''")}'`;
-    const ps = `$w=New-Object -ComObject WScript.Shell; $s=$w.CreateShortcut(${psq(shortcut)}); $s.TargetPath='wscript.exe'; $s.Arguments=${psq('"' + paths.host + '"')}; $s.WorkingDirectory=${psq(paths.root)}; $s.Description='PromptSpark Codex'; $s.Save()`;
-    try {
-      const psFile = path.join(paths.root, ".create-promptspark-shortcut.ps1");
-      fs.writeFileSync(psFile, ps, "utf8");
-      execSync(`powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${psFile}"`, { windowsHide: true });
-      fs.rmSync(psFile, { force: true });
-      if (!exists(shortcut)) console.warn(`未能创建快捷方式: ${shortcut}`);
-    } catch (error) {
-      console.warn(`快捷方式创建失败: ${error.message}`);
-    }
+    fs.rmSync(paths.runtime, { force: true });
+    fs.rmSync(paths.ensureProxy, { force: true });
+    fs.rmSync(paths.proxy, { force: true });
+    fs.rmSync(userPaths.script, { force: true });
+    updateCodexUserScriptsRegistry(true);
+    try { fs.rmSync(path.join(desktopPath(), "PromptSpark Codex.lnk"), { force: true }); } catch { /* ignore */ }
+    logStep("✓ 已移除 Codex++ 用户脚本与本地代理文件");
+    return { changed: true, action: "removed", path: userPaths.script };
   }
-  if (uninstall) fs.rmSync(paths.registry, { force: true });
-  return { changed: true, action: uninstall ? "removed" : "installed", path: paths.script };
+
+  logStep("部署 Codex 本地代理运行时 …");
+  deployRuntimeFiles(paths.root);
+  if (exists(CODEX_RUNTIME_JS)) {
+    fs.copyFileSync(CODEX_RUNTIME_JS, paths.runtime);
+  }
+  fs.writeFileSync(paths.script, scriptBody, "utf8");
+  fs.writeFileSync(
+    paths.registry,
+    JSON.stringify({ ...data, exe: codexExe || "", script: paths.script, proxy: paths.proxy }, null, 2),
+    "utf8",
+  );
+
+  // Primary: Codex++ user plugin loads with Codex, then wakes local proxy.
+  logStep("写入 Codex++ 用户脚本（随插件加载启动代理）…");
+  fs.mkdirSync(userPaths.scriptsDir, { recursive: true });
+  fs.writeFileSync(userPaths.script, scriptBody, "utf8");
+  updateCodexUserScriptsRegistry(false);
+  registerSharedProtocolHandler();
+
+  // Remove legacy shortcut launcher approach.
+  try { fs.rmSync(path.join(desktopPath(), "PromptSpark Codex.lnk"), { force: true }); } catch { /* ignore */ }
+  fs.rmSync(paths.host, { force: true });
+
+  if (!exists(path.join(winEnvPaths().home, ".codex-session-delete")) &&
+      !exists(path.join(process.env.LOCALAPPDATA || "", "com.bigpizzav3.codexplusplus.manager"))) {
+    console.warn("⚠ 未检测到 Codex++；请安装 Codex++（launchMode=patch）后用户脚本才会随 Codex 自动加载");
+  } else {
+    logStep(`✓ Codex++ 用户脚本已启用 → ${userPaths.script}`);
+  }
+  return { changed: true, action: "installed", path: userPaths.script };
 }
 
 function ensureBuilt() {
@@ -640,43 +1049,18 @@ function launchApp(exePath) {
   return true;
 }
 
-async function proxyHealthy() {
-  try {
-    const res = await fetch(`http://127.0.0.1:${PROXY_PORT}/health`, {
-      signal: AbortSignal.timeout(800),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
 async function ensureProxyRunning() {
   if (!exists(PROXY_JS)) {
     console.warn("⚠ 未找到 proxy.mjs，Cursor/Devin 的 API 请求可能失败（CORS）");
     return false;
   }
-  if (await proxyHealthy()) {
-    console.log(`✓ 本地 LLM 代理已在运行 (127.0.0.1:${PROXY_PORT})`);
-    return true;
-  }
-  console.log(`启动本地 LLM 代理 (127.0.0.1:${PROXY_PORT}) …`);
-  const child = spawn(process.execPath, [PROXY_JS], {
-    cwd: ROOT,
-    detached: true,
-    stdio: "ignore",
-    windowsHide: true,
+  console.log(`检查本地 LLM 代理 (127.0.0.1:${PROXY_PORT}) …`);
+  const ok = await ensureProxyRunningShared({
+    proxyJs: PROXY_JS,
+    log: (msg) => console.log(msg),
   });
-  child.unref();
-  for (let i = 0; i < 15; i++) {
-    await new Promise((r) => setTimeout(r, 200));
-    if (await proxyHealthy()) {
-      console.log("✓ 本地 LLM 代理已启动");
-      return true;
-    }
-  }
-  console.warn("⚠ 代理启动超时，可手动运行: node proxy.mjs");
-  return false;
+  if (ok) console.log(`✓ 本地 LLM 代理就绪 (127.0.0.1:${PROXY_PORT})`);
+  return ok;
 }
 
 function ask(question) {
@@ -783,18 +1167,33 @@ async function selectHosts(targets) {
 }
 
 function desktopPath() {
+  const { home } = winEnvPaths();
+  const candidates = [];
   try {
-    const value = execSync("powershell.exe -NoProfile -NonInteractive -Command \"[Environment]::GetFolderPath('Desktop')\"", { encoding: "utf8", windowsHide: true }).trim();
-    if (value) return value;
-  } catch { /* fallback */ }
-  return path.join(process.env.USERPROFILE || "", "Desktop");
+    const value = readPowerShellText("[Environment]::GetFolderPath('Desktop')");
+    if (value) candidates.push(value);
+  } catch {
+    /* fallback */
+  }
+  candidates.push(
+    path.join(home, "Desktop"),
+    path.join(home, "桌面"),
+    path.join(process.env.USERPROFILE || home || "", "Desktop"),
+  );
+  for (const candidate of uniq(candidates)) {
+    if (candidate && exists(candidate)) return candidate;
+  }
+  return candidates.find(Boolean) || path.join(home || "", "Desktop");
 }
 
 async function closeHosts(selected, targets) {
   const procNames = collectProcessNames(selected, targets);
   if (!procNames.length) return;
-  if (!procNames.some((n) => isProcessRunning(n))) return;
-  console.log(`关闭进程：${procNames.join(", ")} …`);
+  if (!procNames.some((n) => isProcessRunning(n))) {
+    logStep("目标进程未在运行，跳过关闭。");
+    return;
+  }
+  logStep(`关闭进程：${procNames.join(", ")} …`);
   killProcesses(procNames);
   const gone = await waitProcessesGone(procNames, 30000);
   if (!gone) {
@@ -812,25 +1211,42 @@ async function applyPatches(selected, targets, scriptBody) {
     const t = targets[id];
     try {
       if (id === "codex") {
-        const result = updateCodexPlusPlusScript(scriptBody, uninstallMode, t.exe);
-        results.push({ id, ...result });
-        console.log(`✅${t.label}: ${result.action}`);
+        // Codex 已改由 Codex++ 内置 PromptSpark；本安装器不再写入 Codex++ user_scripts。
+        if (uninstallMode) {
+          logStep(`清理旧版 ${t.label} 安装残留 …`);
+          const result = updateCodexPlusPlusScript(scriptBody, true, t.exe);
+          results.push({ id, ...result });
+          logStep(`✓ ${t.label}: ${result.action}`);
+        } else {
+          console.warn(
+            "⚠ Codex 已改由 Codex++ 内置 PromptSpark 提供；请安装/更新 Codex++，本仓库仅支持 Cursor。",
+          );
+          results.push({ id, skipped: true, action: "skipped-codex-moved-to-codexplusplus" });
+        }
         continue;
       }
       if (!t.workbench || !exists(t.workbench)) {
         throw new Error("未找到可注入的 workbench.html（请确认已安装原生应用）");
       }
+      logStep(`${uninstallMode ? "卸载" : "注入"} ${t.label} workbench …`);
       const r = await withWriteRetry(() => patchWorkbench(t.workbench, scriptBody, uninstallMode));
       if (t.productJson && exists(t.productJson)) {
         await withWriteRetry(() => updateProductChecksum(t.productJson, t.checksumKey, t.workbench));
       }
+      if (id === "cursor") {
+        const launcher = updateCursorLauncher(uninstallMode, t.exe);
+        logStep(`✓ ${t.label} 代理随启: ${launcher.action}`);
+      }
       results.push({ id, ...r, path: t.workbench });
-      console.log(`✓ ${t.label}: ${results.at(-1).action}`);
+      logStep(`✓ ${t.label}: ${results.at(-1).action}`);
       if (results.at(-1).path) console.log(`  → ${results.at(-1).path}`);
     } catch (error) {
       console.error(`✗ ${t.label}: ${error.message}`);
       results.push({ id, error: error.message });
     }
+  }
+  if (uninstallMode) {
+    refreshProtocolAfterHostChange();
   }
   return results;
 }
@@ -861,10 +1277,6 @@ function isElevated() {
   } catch {
     return false;
   }
-}
-
-function psQuote(value) {
-  return `'${String(value).replaceAll("'", "''")}'`;
 }
 
 async function ensureElevated() {
@@ -899,6 +1311,7 @@ async function main() {
   if (!uninstallMode) {
     await ensureProxyRunning();
   }
+  logStep(uninstallMode ? "准备卸载 …" : "准备注入脚本 …");
   const scriptBody = uninstallMode ? null : ensureBuilt();
 
   // 顺序：关进程 → 写补丁 → 再启动
@@ -910,6 +1323,7 @@ async function main() {
   console.log("\n完成。交互：左键优化 / 再点还原 / 右键或 Alt+点击打开设置。");
   if (!uninstallMode) {
     console.log(`API 请求经本地代理 http://127.0.0.1:${PROXY_PORT}（Electron 宿主需此代理绕过 CORS）。`);
+    console.log("Cursor：代理由扩展随进程启动；Codex：由 Codex++ 用户脚本加载时唤醒。");
   }
   if (results.some((r) => r.error)) process.exit(1);
   if (ELEVATED_CHILD && process.platform === "win32") {

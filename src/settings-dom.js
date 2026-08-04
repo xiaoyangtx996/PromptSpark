@@ -437,7 +437,7 @@
         warnEl,
         cpoEl("p", {
           className: "cpo-footnote",
-          text: `通道 ${typeof HOST === "string" ? HOST : "auto"} · 本地代理 127.0.0.1:37841`,
+          text: `通道 ${typeof HOST === "string" ? HOST : "auto"} · 本地代理随宿主启动 · 127.0.0.1:37841`,
         }),
       ]),
       cpoEl("section", { className: "cpo-block" }, [

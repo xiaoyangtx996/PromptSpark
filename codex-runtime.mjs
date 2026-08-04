@@ -1,13 +1,22 @@
 import fs from "node:fs";
 import http from "node:http";
+import path from "node:path";
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { ensureProxyRunning } from "./ensure-proxy.mjs";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const configPath = process.argv[2];
 const config = configPath && JSON.parse(fs.readFileSync(configPath, "utf8"));
 const exe = config?.exe || process.env.PROMPTSPARK_CODEX_EXE;
 const script = config?.script || process.env.PROMPTSPARK_SCRIPT;
 const port = Number(process.env.PROMPTSPARK_CODEX_DEBUG_PORT || 39271);
 if (!exe || !script) throw new Error("PROMPTSPARK_CODEX_EXE and PROMPTSPARK_SCRIPT are required");
+
+const proxyJs = config?.proxy
+  || process.env.PROMPTSPARK_PROXY_JS
+  || path.join(__dirname, "proxy.mjs");
+await ensureProxyRunning({ proxyJs, log: null });
 
 const source = fs.readFileSync(script, "utf8");
 const child = spawn(exe, [`--remote-debugging-port=${port}`], { detached: false, stdio: "inherit" });
