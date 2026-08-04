@@ -2,12 +2,12 @@
 @prompt-spark-script
 name: PromptSpark
 description: Optimize the composer prompt with an external LLM; click to optimize, click again to restore. Multi-host: Codex / Cursor / Devin / Antigravity.
-version: 1.3.0
+version: 1.3.2
 author: PromptSpark
 */
 
 (() => {
-  const SCRIPT_VERSION = "1.3.0";
+  const SCRIPT_VERSION = "1.3.2";
   const API_KEY = "__codexPlusPromptOptimize";
   const MARKET_ID = "prompt-optimize";
   const BRIDGE_KEY = "__codexSessionDeleteBridge";
@@ -24,7 +24,9 @@ author: PromptSpark
   const POLL_MS = 1500;
   const MUTATION_DEBOUNCE_MS = 220;
   const TOAST_MS = 2200;
-  const REQUEST_TIMEOUT_MS = 60000;
+  // 仅作极端兜底，不再因「稍慢」自动打断优化；正常等待由上游 LLM 决定。
+  const REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
+  const CANCEL_GUARD_MS = 800;
   const TEMPERATURE = 0.3;
   const MAX_TOKENS = 4096;
   const DEBUG_PREFIX = "[PromptSpark]";
@@ -103,6 +105,7 @@ author: PromptSpark
     loading: false,
     button: null,
     abort: null,
+    optimizeStartedAt: 0,
     bridgePathUnsupported: false,
     lastWrittenText: null,
     writeToken: 0,
@@ -3154,11 +3157,12 @@ author: PromptSpark
 
     const threadId = readActiveConversationId();
     const controller = new AbortController();
-    let userCancelled = false;
+    let cancelReason = "";
+    const startedAt = Date.now();
     const timeout = withTimeoutSignal(controller.signal, REQUEST_TIMEOUT_MS);
     runtime.abort = {
-      abort() {
-        userCancelled = true;
+      abort(reason = "user") {
+        cancelReason = reason || "user";
         try {
           controller.abort();
         } catch (_) {
@@ -3167,6 +3171,7 @@ author: PromptSpark
       },
     };
     runtime.loading = true;
+    runtime.optimizeStartedAt = startedAt;
     refreshButtonAppearance();
 
     try {
@@ -3193,10 +3198,15 @@ author: PromptSpark
         showToast("已优化，再次点击可还原", "ok");
       }
     } catch (error) {
-      if (userCancelled) {
+      if (cancelReason === "user") {
         showToast("已取消优化", "info");
-      } else if (timeout.didTimeout() || error?.name === "AbortError") {
-        showToast("优化超时", "error");
+      } else if (cancelReason === "reload" || cancelReason === "destroy") {
+        // 脚本热重载/销毁：静默结束，避免误报「已取消」
+        debugLog("optimize aborted by reload/destroy");
+      } else if (timeout.didTimeout()) {
+        showToast("优化等待过久，已停止（可再次点击重试）", "error");
+      } else if (error?.name === "AbortError") {
+        showToast("优化已中断", "warn");
       } else {
         let message = collapseWs(error?.message || String(error) || "优化失败");
         if (/no eligible group/i.test(message)) {
@@ -3210,6 +3220,7 @@ author: PromptSpark
       timeout.cleanup();
       runtime.loading = false;
       runtime.abort = null;
+      runtime.optimizeStartedAt = 0;
       refreshButtonAppearance();
     }
   }
@@ -3232,8 +3243,14 @@ author: PromptSpark
 
   function cancelOptimize() {
     if (!runtime.loading) return;
+    // 防止同一次点击/DOM 重建误触发「开始→立刻取消」
+    const startedAt = Number(runtime.optimizeStartedAt || 0);
+    if (startedAt && Date.now() - startedAt < CANCEL_GUARD_MS) {
+      debugLog("ignore cancel within guard window");
+      return;
+    }
     try {
-      runtime.abort?.abort();
+      runtime.abort?.abort("user");
     } catch (_) {
       /* ignore */
     }
@@ -3840,7 +3857,7 @@ author: PromptSpark
   function destroy() {
     runtime.disposed = true;
     try {
-      runtime.abort?.abort();
+      runtime.abort?.abort("destroy");
     } catch (_) {
       /* ignore */
     }
