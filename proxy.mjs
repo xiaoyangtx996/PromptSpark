@@ -56,7 +56,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${HOST}:${PORT}`);
 
   if (req.method === "GET" && (url.pathname === "/health" || url.pathname === "/")) {
-    sendJson(res, 200, { ok: true, service: "promptspark-proxy", version: "1.2.6" });
+    sendJson(res, 200, { ok: true, service: "promptspark-proxy", version: "1.3.3" });
     return;
   }
 

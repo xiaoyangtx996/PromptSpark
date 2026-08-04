@@ -1,27 +1,6 @@
-/* injected: multi-host adapters (Cursor / Devin / Antigravity) */
+/* injected: Cursor workbench adapters */
   function detectHost() {
-    try {
-      const href = String(location?.href || "");
-      const title = String(document.title || "");
-      const product = window.product?.nameShort || window.product?.nameLong || "";
-      const blob = `${href}\n${title}\n${product}`.toLowerCase();
-      if (/antigravity|jetski|workbench-jetski/.test(blob) || document.querySelector("[class*='jetski'],[class*='antigravity']")) {
-        return "antigravity";
-      }
-      if (/devin|windsurf|cascade/.test(blob) || document.querySelector(".cascade-panel,[class*='cascade']")) {
-        return "devin";
-      }
-      if (/cursor|anysphere/.test(blob) || document.querySelector(".composer-bar,.composer-bar-input-buttons")) {
-        return "cursor";
-      }
-      if (/openai\.com\/codex|codex\.app|__codexSessionDeleteBridge/.test(blob) || typeof window.__codexSessionDeleteBridge === "function") {
-        return "codex";
-      }
-      if (document.querySelector(".monaco-workbench")) return "cursor";
-      return "codex";
-    } catch (_) {
-      return "codex";
-    }
+    return "cursor";
   }
 
   HOST = detectHost();

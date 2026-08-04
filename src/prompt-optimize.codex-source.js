@@ -22,9 +22,8 @@ author: Codex++ Community
   const POLL_MS = 1500;
   const MUTATION_DEBOUNCE_MS = 120;
   const TOAST_MS = 2200;
-  // 仅作极端兜底，不再因「稍慢」自动打断优化；正常等待由上游 LLM 决定。
-  const REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
-  const CANCEL_GUARD_MS = 800;
+  // 仅给代理/桥接层网络请求设上限；优化流程本身不自动超时取消，由用户点击取消。
+  const REQUEST_TIMEOUT_MS = 30 * 60 * 1000;
   const TEMPERATURE = 0.3;
   const MAX_TOKENS = 4096;
   const DEBUG_PREFIX = "[prompt-optimize]";
@@ -102,7 +101,6 @@ author: Codex++ Community
     disposed: false,
     loading: false,
     abort: null,
-    optimizeStartedAt: 0,
     bridgePathUnsupported: false,
     lastWrittenText: null,
     writeToken: 0,
@@ -1953,32 +1951,6 @@ author: Codex++ Community
     });
   }
 
-  function withTimeoutSignal(parentSignal, ms) {
-    const controller = new AbortController();
-    let timedOut = false;
-    const onAbort = () => controller.abort();
-    if (parentSignal) {
-      if (parentSignal.aborted) controller.abort();
-      else parentSignal.addEventListener("abort", onAbort, { once: true });
-    }
-    const timer = window.setTimeout(() => {
-      timedOut = true;
-      try {
-        controller.abort();
-      } catch (_) {
-        /* ignore */
-      }
-    }, ms);
-    return {
-      signal: controller.signal,
-      didTimeout: () => timedOut,
-      cleanup() {
-        window.clearTimeout(timer);
-        parentSignal?.removeEventListener?.("abort", onAbort);
-      },
-    };
-  }
-
   async function runOptimize() {
     if (!hasRequestTransport()) {
       showToast("当前 Codex++ 不提供可用的 LLM 请求通道", "error");
@@ -2000,8 +1972,6 @@ author: Codex++ Community
     const threadId = readActiveConversationId();
     const controller = new AbortController();
     let cancelReason = "";
-    const startedAt = Date.now();
-    const timeout = withTimeoutSignal(controller.signal, REQUEST_TIMEOUT_MS);
     runtime.abort = {
       abort(reason = "user") {
         cancelReason = reason || "user";
@@ -2013,11 +1983,10 @@ author: Codex++ Community
       },
     };
     runtime.loading = true;
-    runtime.optimizeStartedAt = startedAt;
     refreshButtonAppearance();
 
     try {
-      const optimized = await optimizePrompt(original, settings, timeout.signal);
+      const optimized = await optimizePrompt(original, settings, controller.signal);
       if (!optimized.trim()) throw new Error("模型返回为空");
       const activeInput = findComposerInput();
       if (readActiveConversationId() !== threadId || activeInput !== input || !input?.isConnected) {
@@ -2043,10 +2012,7 @@ author: Codex++ Community
       if (cancelReason === "user") {
         showToast("已取消优化", "info");
       } else if (cancelReason === "reload" || cancelReason === "destroy") {
-        // 脚本热重载/销毁：静默结束，避免误报「已取消」
         debugLog("optimize aborted by reload/destroy");
-      } else if (timeout.didTimeout()) {
-        showToast("优化等待过久，已停止（可再次点击重试）", "error");
       } else if (error?.name === "AbortError") {
         showToast("优化已中断", "warn");
       } else {
@@ -2054,10 +2020,8 @@ author: Codex++ Community
         showToast(message.slice(0, 160) || "优化失败", "error");
       }
     } finally {
-      timeout.cleanup();
       runtime.loading = false;
       runtime.abort = null;
-      runtime.optimizeStartedAt = 0;
       refreshButtonAppearance();
     }
   }
@@ -2080,12 +2044,6 @@ author: Codex++ Community
 
   function cancelOptimize() {
     if (!runtime.loading) return;
-    // 防止同一次点击/DOM 重建误触发「开始→立刻取消」
-    const startedAt = Number(runtime.optimizeStartedAt || 0);
-    if (startedAt && Date.now() - startedAt < CANCEL_GUARD_MS) {
-      debugLog("ignore cancel within guard window");
-      return;
-    }
     try {
       runtime.abort?.abort("user");
     } catch (_) {

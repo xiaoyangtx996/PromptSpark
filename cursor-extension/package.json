@@ -2,7 +2,7 @@
   "name": "promptspark-proxy",
   "displayName": "PromptSpark Proxy",
   "description": "Starts the PromptSpark local LLM proxy when Cursor starts.",
-  "version": "1.3.0",
+  "version": "1.3.3",
   "publisher": "promptspark",
   "engines": {
     "vscode": "^1.80.0"

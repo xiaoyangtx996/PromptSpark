@@ -1,5 +1,5 @@
 /**
- * Build multi-host PromptSpark bundle.
+ * Build Cursor PromptSpark bundle.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -11,7 +11,7 @@ const sourcePath = path.join(root, "src", "prompt-optimize.codex-source.js");
 const adaptersPath = path.join(root, "src", "host-adapters.js");
 const settingsDomPath = path.join(root, "src", "settings-dom.js");
 const outPath = path.join(root, "dist", "prompt-optimize.js");
-const VERSION = "1.3.2";
+const VERSION = "1.3.3";
 
 let src = fs.readFileSync(sourcePath, "utf8");
 let adapters = fs.readFileSync(adaptersPath, "utf8");
@@ -26,7 +26,7 @@ src = src.replace(
   `/*
 @prompt-spark-script
 name: PromptSpark
-description: Optimize the composer prompt with an external LLM; click to optimize, click again to restore. Multi-host: Codex / Cursor / Devin / Antigravity.
+description: Optimize the Cursor Composer prompt with an external LLM; click to optimize, click again to restore.
 version: ${VERSION}
 author: PromptSpark
 */
@@ -36,13 +36,13 @@ author: PromptSpark
 src = src.replace(/const DEBUG_PREFIX = "[^"]+";/, `const DEBUG_PREFIX = "[PromptSpark]";`);
 src = src.replace(/const SCRIPT_VERSION = "[^"]+";/, `const SCRIPT_VERSION = "${VERSION}";`);
 
-// Brand + host-facing copy (no Codex++ in user messages)
-src = src.replaceAll("当前 Codex++ 的 LLM Bridge 路由不可用", "当前 Codex 的请求通道不可用");
+// Brand + host-facing copy (Cursor product; strip Codex++ installer tone)
+src = src.replaceAll("当前 Codex++ 的 LLM Bridge 路由不可用", "当前请求通道不可用");
 src = src.replaceAll("当前 Codex++ 不提供可用的 LLM 请求通道", "当前应用不提供可用的 LLM 请求通道");
-src = src.replaceAll("Codex++ LLM Bridge", "Codex 请求通道");
+src = src.replaceAll("Codex++ LLM Bridge", "请求通道");
 src = src.replaceAll("Codex++ 请求通道", "请求通道");
-src = src.replaceAll("兼容当前 Codex++ 发行版", "兼容当前 Codex 发行版");
-src = src.replaceAll("已检测到 Codex++ LLM Bridge。", "已检测到 Codex 请求桥接。");
+src = src.replaceAll("兼容当前 Codex++ 发行版", "兼容当前发行版");
+src = src.replaceAll("已检测到 Codex++ LLM Bridge。", "已检测到请求桥接。");
 src = src.replaceAll("Prompt Optimize 设置", "PromptSpark 设置");
 src = src.replaceAll("Prompt Optimize", "PromptSpark");
 
@@ -50,7 +50,7 @@ src = src.replace(
   `const SETTINGS_KEY = "codexPlusPromptOptimize.settings.v1";`,
   `const SETTINGS_KEY = "promptOptimize.settings.v1";
   const LEGACY_SETTINGS_KEY = "codexPlusPromptOptimize.settings.v1";
-  let HOST = "codex";`,
+  let HOST = "cursor";`,
 );
 
 src = src.replace(
@@ -872,7 +872,7 @@ src = src.replace(
     ensureSparkleButton();
     window[API_KEY] = api;
     console.info(DEBUG_PREFIX, \`loaded v\${SCRIPT_VERSION} host=\${HOST}\`);
-    // When user plugin/script loads (Cursor extension / Codex++ user_scripts), wake local proxy.
+    // When Cursor extension / protocol wake loads, start local proxy.
     (async () => {
       try {
         if (await waitLocalProxy(500)) return;
@@ -899,7 +899,7 @@ if (!src.includes("function findComposerInput() {\n    const pm = findProseMirro
 src = src.replace(
   "  function findComposerInput() {\n    const pm = findProseMirrorInput();",
   `  function findComposerInput() {
-    if (HOST !== "codex" && typeof findWorkbenchChatInput === "function") {
+    if (typeof findWorkbenchChatInput === "function") {
       const wb = findWorkbenchChatInput();
       if (wb) return wb;
     }
@@ -915,10 +915,9 @@ src = src.replace(
 
   function ensureSparkleButton() {
     if (typeof refreshHost === "function") refreshHost();
-    if (HOST !== "codex") {
-      ensureWorkbenchSparkleButton();
-      return;
-    }`,
+    ensureWorkbenchSparkleButton();
+    return;
+`,
 );
 
 // Guard: icon builder must exist before createButton

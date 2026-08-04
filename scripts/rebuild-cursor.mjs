@@ -4,7 +4,7 @@ execSync("node build.mjs", { stdio: "inherit" });
 execSync("node --check dist/prompt-optimize.js", { stdio: "inherit" });
 const s = fs.readFileSync("dist/prompt-optimize.js", "utf8");
 const ok = {
-  v: /SCRIPT_VERSION = "1\.3\.0"/.test(s),
+  v: /SCRIPT_VERSION = "1\.3\.3"/.test(s),
   brand: s.includes("PromptSpark") && s.includes("[PromptSpark]") && !s.includes("Codex++"),
   noCodexPlus: !/Codex\+\+/.test(s),
   addTab: s.includes("cpo-dd-add") && s.includes("cpo-spinner"),

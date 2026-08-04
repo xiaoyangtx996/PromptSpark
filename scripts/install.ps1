@@ -112,7 +112,6 @@ function Sync-Installer {
   Download-File "proxy.mjs" (Join-Path $InstallDir "proxy.mjs")
   Download-File "ensure-proxy.mjs" (Join-Path $InstallDir "ensure-proxy.mjs")
   Download-File "cursor-runtime.mjs" (Join-Path $InstallDir "cursor-runtime.mjs")
-  Download-File "codex-runtime.mjs" (Join-Path $InstallDir "codex-runtime.mjs")
   Download-File "dist/prompt-optimize.js" (Join-Path $InstallDir "dist\prompt-optimize.js")
 
   $extDir = Join-Path $InstallDir "cursor-extension"

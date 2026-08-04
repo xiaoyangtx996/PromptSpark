@@ -10,8 +10,8 @@
 
 PromptSpark 在 **Cursor** Composer 输入框旁增加一个优化按钮。写好草稿后点击一次，由你配置的 LLM 改写；再次点击即可恢复原文。右键或 `Alt + 点击` 打开设置。
 
-> 本仓库安装入口 **仅支持 Cursor（Windows）**。  
-> Codex 桌面端请使用 [Codex++](https://github.com/xiaoyangtx996/CodexPlusPlus)（已内置 PromptSpark 用户脚本 + `/llm-proxy`）。
+> 本仓库 **只支持 Cursor（Windows）**。  
+> Codex 桌面端请使用 [Codex++](https://github.com/xiaoyangtx996/CodexPlusPlus)（已内置 PromptSpark）。
 
 ## 界面预览
 
@@ -84,14 +84,16 @@ node install.mjs --hosts=cursor --no-restart
 node install.mjs --uninstall --hosts=cursor
 ```
 
-> 若曾用旧版安装过 Codex，`--uninstall` 仍会清理 `%APPDATA%\Codex++\user_scripts` 中的旧 PromptSpark 脚本。Codex 新能力请改用 Codex++。
+> 若曾用旧版本仓库往 Codex++ 写过脚本，`--uninstall` 会顺带清理 `%APPDATA%\Codex++\user_scripts` 中的旧 PromptSpark 残留。日常 Codex 能力请只用 Codex++。
 
 ## 与 Codex++ 的分工
 
-| 宿主 | 使用方式 |
+| 宿主 | 去哪 |
 |:---|:---|
-| Cursor | 本仓库安装器（workbench 注入 + Cursor 扩展代理） |
-| Codex 桌面 | [Codex++](https://github.com/xiaoyangtx996/CodexPlusPlus) 内置 `promptspark.js`，经 `__codexSessionDeleteBridge("/llm-proxy")` 转发 LLM 请求 |
+| Cursor | **本仓库**（workbench 注入 + Cursor 扩展本地代理） |
+| Codex 桌面 | **[Codex++](https://github.com/xiaoyangtx996/CodexPlusPlus)**（内置 PromptSpark，本仓库不安装） |
+
+本仓库不再支持 Devin / Windsurf / Antigravity 等其它宿主。
 
 ## License
 

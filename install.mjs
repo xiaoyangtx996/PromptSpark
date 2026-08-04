@@ -23,7 +23,6 @@ const DIST = path.join(ROOT, "dist", "prompt-optimize.js");
 const PROXY_JS = path.join(ROOT, "proxy.mjs");
 const ENSURE_PROXY_JS = path.join(ROOT, "ensure-proxy.mjs");
 const CURSOR_RUNTIME_JS = path.join(ROOT, "cursor-runtime.mjs");
-const CODEX_RUNTIME_JS = path.join(ROOT, "codex-runtime.mjs");
 const PROXY_PORT = 37841;
 const PROTOCOL_SCHEME = "promptspark";
 const PATCH_BEGIN = "<!-- PROMPTSPARK-PATCH -->";
@@ -31,6 +30,7 @@ const PATCH_END = "<!-- /PROMPTSPARK-PATCH -->";
 const LEGACY_PATCH_BEGIN = "<!-- PROMPT-OPTIMIZE-PATCH -->";
 const LEGACY_PATCH_END = "<!-- /PROMPT-OPTIMIZE-PATCH -->";
 const PATCH_ASSET = "promptspark.js";
+const APP_VERSION = "1.3.3";
 
 function promptSparkDataRoot() {
   const { localAppData, home } = winEnvPaths();
@@ -53,8 +53,7 @@ const FORCE_HOSTS = hostsArg
 
 /**
  * PromptSpark 安装入口仅开放 Cursor。
- * Codex 提示词优化已迁入 Codex++ 内置用户脚本，请使用 Codex++。
- * Devin / Antigravity 检测逻辑保留，待验证后再开放。
+ * Codex 请使用 Codex++：https://github.com/xiaoyangtx996/CodexPlusPlus
  */
 const ENABLED_HOST_IDS = new Set(["cursor"]);
 
@@ -286,115 +285,16 @@ function findAppExe(exeNames, { dirHints = [], titleHints = [], envKey = "" } = 
   return walkFindExe(programsRoot, names, { maxDepth: 4, maxDirs: 500 });
 }
 
-function findStoreCodexExe() {
-  const { programFiles } = winEnvPaths();
-  const winApps = path.join(programFiles, "WindowsApps");
-  if (!exists(winApps)) return null;
-  try {
-    const packageRoot = execSync(
-      "powershell.exe -NoProfile -NonInteractive -Command \"(Get-AppxPackage -Name 'OpenAI.Codex*' | Select-Object -First 1 -ExpandProperty InstallLocation)\"",
-      { encoding: "utf8", windowsHide: true },
-    ).trim();
-    const packageExe = packageRoot && path.join(packageRoot, "app", "ChatGPT.exe");
-    if (packageExe) return packageExe;
-  } catch {
-    /* AppX lookup is unavailable on some Windows builds. */
-  }
-  try {
-    const direct = execSync(
-      `powershell.exe -NoProfile -NonInteractive -Command "Get-ChildItem -LiteralPath '${winApps.replaceAll("'", "''")}' -Directory -Filter 'OpenAI.Codex_*' -ErrorAction Stop | ForEach-Object { $p = Join-Path $_.FullName 'app\\Codex.exe'; if (Test-Path -LiteralPath $p) { $p; break } }"`,
-      { encoding: "utf8", windowsHide: true },
-    ).trim();
-    if (direct && exists(direct.split(/\r?\n/)[0].trim())) return direct.split(/\r?\n/)[0].trim();
-  } catch {
-    /* WindowsApps may deny directory enumeration; fall back to known paths. */
-  }
-  try {
-    const dirs = fs.readdirSync(winApps).filter((d) => /^OpenAI\.Codex_/i.test(d));
-    dirs.sort().reverse();
-    for (const d of dirs) {
-      const exe = firstExisting([
-        path.join(winApps, d, "app", "Codex.exe"),
-        path.join(winApps, d, "Codex.exe"),
-      ]);
-      if (exe) return exe;
-    }
-  } catch {
-    /* ACL */
-  }
-  return null;
-}
-
 function detectTargets() {
-  const codexExe =
-    findAppExe(["Codex.exe"], {
-      dirHints: ["Codex", "codex", "OpenAI Codex", "OpenAI"],
-      titleHints: ["codex", "openai"],
-      envKey: "PROMPTSPARK_CODEX_EXE",
-    }) || findStoreCodexExe();
-  const codexWb = resolveElectronWorkbench(codexExe ? path.dirname(codexExe) : null);
-  const codexScriptPaths = codexPlusPlusPaths();
-  const codexPlusLauncher = findAppExe(["codex-plus-plus.exe"], {
-    dirHints: ["CodexPlusPlus", "Codex++"],
-    titleHints: ["codex-plus-plus", "codex++"],
-    envKey: "PROMPTSPARK_CODEX_PLUS_EXE",
-  });
-
   const cursorExe = findAppExe(["Cursor.exe"], {
     dirHints: ["cursor", "Cursor"],
     titleHints: ["cursor"],
     envKey: "PROMPTSPARK_CURSOR_EXE",
   });
   const cursorWb = resolveElectronWorkbench(cursorExe ? path.dirname(cursorExe) : null);
-
-  const windsurfExe = findAppExe(["Windsurf.exe"], {
-    dirHints: ["Windsurf", "windsurf"],
-    titleHints: ["windsurf"],
-    envKey: "PROMPTSPARK_WINDSURF_EXE",
-  });
-  const devinExe =
-    findAppExe(["Devin.exe"], {
-      dirHints: ["Devin", "devin"],
-      titleHints: ["devin"],
-      envKey: "PROMPTSPARK_DEVIN_EXE",
-    }) || windsurfExe;
-  const devinWb = resolveElectronWorkbench(devinExe ? path.dirname(devinExe) : null);
-
-  const antigravityExe = findAppExe(["Antigravity.exe", "Antigravity IDE.exe"], {
-    dirHints: ["antigravity", "Antigravity", "Antigravity IDE"],
-    titleHints: ["antigravity"],
-    envKey: "PROMPTSPARK_ANTIGRAVITY_EXE",
-  });
-  const antigravityRoots = uniq([
-    antigravityExe && path.dirname(antigravityExe),
-    antigravityExe && path.join(path.dirname(antigravityExe), "Antigravity"),
-  ]);
-  let antigravityWb = { workbench: null, productJson: null, checksumKey: null };
-  for (const root of antigravityRoots) {
-    antigravityWb = resolveElectronWorkbench(root);
-    if (antigravityWb.workbench) break;
-  }
-  // Some installs put workbench one level above the exe folder
-  if (!antigravityWb.workbench && antigravityExe) {
-    antigravityWb = resolveElectronWorkbench(path.dirname(path.dirname(antigravityExe)));
-  }
+  const cursorScriptPaths = cursorLauncherPaths();
 
   const targets = {
-    codex: {
-      id: "codex",
-      label: "Codex",
-      available: ENABLED_HOST_IDS.has("codex") && !!codexExe,
-      runtimeAvailable: hasCodexPlusPlusRuntime(),
-      exe: codexExe,
-      workbench: codexWb.workbench,
-      productJson: codexWb.productJson,
-      checksumKey: codexWb.checksumKey,
-      scriptPaths: codexScriptPaths,
-      restart: {
-        processNames: ["Codex", "ChatGPT"],
-        launch: codexExe,
-      },
-    },
     cursor: {
       id: "cursor",
       label: "Cursor",
@@ -403,48 +303,21 @@ function detectTargets() {
       workbench: cursorWb.workbench,
       productJson: cursorWb.productJson,
       checksumKey: cursorWb.checksumKey || "vs/code/electron-sandbox/workbench/workbench.html",
-      scriptPaths: cursorLauncherPaths(),
+      scriptPaths: cursorScriptPaths,
       restart: {
         processNames: ["Cursor"],
         launch: cursorExe,
       },
     },
-    devin: {
-      id: "devin",
-      label: "Devin / Windsurf",
-      available: ENABLED_HOST_IDS.has("devin") && !!(devinExe && devinWb.workbench && exists(devinWb.workbench)),
-      exe: devinExe,
-      workbench: devinWb.workbench,
-      productJson: devinWb.productJson,
-      checksumKey: devinWb.checksumKey || "vs/code/electron-browser/workbench/workbench.html",
-      restart: {
-        processNames: ["Devin", "Windsurf"],
-        launch: devinExe,
-      },
-    },
-    antigravity: {
-      id: "antigravity",
-      label: "Antigravity",
-      available:
-        ENABLED_HOST_IDS.has("antigravity") && !!(antigravityWb.workbench && exists(antigravityWb.workbench)),
-      exe: antigravityExe,
-      workbench: antigravityWb.workbench,
-      productJson: antigravityWb.productJson,
-      checksumKey: antigravityWb.checksumKey || "vs/code/electron-browser/workbench/workbench.html",
-      restart: {
-        processNames: ["Antigravity", "Antigravity IDE"],
-        launch: antigravityExe,
-      },
-    },
   };
+
   for (const target of Object.values(targets)) {
-    if (target.id === "codex") {
-      target.installed = exists(codexPlusUserScriptPaths().script) || exists(codexScriptPaths.script);
-    } else {
-      target.installed = !!(target.workbench && exists(target.workbench) &&
-        (exists(path.join(path.dirname(target.workbench), PATCH_ASSET)) ||
-          fs.readFileSync(target.workbench, "utf8").includes(PATCH_BEGIN)));
-    }
+    target.installed = !!(
+      target.workbench &&
+      exists(target.workbench) &&
+      (exists(path.join(path.dirname(target.workbench), PATCH_ASSET)) ||
+        fs.readFileSync(target.workbench, "utf8").includes(PATCH_BEGIN))
+    );
   }
   return targets;
 }
@@ -486,10 +359,6 @@ function codexPlusUserScriptPaths() {
     scriptKey: "user:market-promptspark.js",
     marketId: "prompt-optimize",
   };
-}
-
-function hasCodexPlusPlusRuntime() {
-  return exists(codexPlusUserScriptPaths().script) || exists(codexPlusPlusPaths().script);
 }
 
 function deployRuntimeFiles(destDir) {
@@ -579,8 +448,7 @@ function registerSharedProtocolHandler() {
 function refreshProtocolAfterHostChange() {
   const cursorExt = cursorExtensionPaths();
   const cursorOk = exists(path.join(cursorExt.dir, "extension.js"));
-  const codexOk = exists(codexPlusUserScriptPaths().script);
-  if (cursorOk || codexOk) {
+  if (cursorOk) {
     registerSharedProtocolHandler();
   } else {
     unregisterProtocolHandler();
@@ -665,14 +533,14 @@ $s.Save()
 function cursorExtensionPaths() {
   const home = process.env.USERPROFILE || winEnvPaths().home;
   const root = path.join(home, ".cursor", "extensions");
-  const folderName = "promptspark.promptspark-proxy-1.3.0";
+  const folderName = `promptspark.promptspark-proxy-${APP_VERSION}`;
   return {
     root,
     dir: path.join(root, folderName),
     folderName,
     extensionsJson: path.join(root, "extensions.json"),
     id: "promptspark.promptspark-proxy",
-    version: "1.3.0",
+    version: APP_VERSION,
   };
 }
 
@@ -832,7 +700,7 @@ function updateCodexUserScriptsRegistry(uninstall = false) {
       ...(data.market[paths.scriptKey] || {}),
       id: paths.marketId,
       name: "PromptSpark",
-      version: "1.3.1",
+      version: APP_VERSION,
       script_url: "",
       homepage: "",
       installed_at: String(Date.now()),
@@ -842,59 +710,28 @@ function updateCodexUserScriptsRegistry(uninstall = false) {
   fs.writeFileSync(paths.registry, JSON.stringify(data, null, 2) + "\n", "utf8");
 }
 
-function updateCodexPlusPlusScript(scriptBody, uninstall = false, codexExe = "") {
+/** 仅用于 --uninstall 清理旧版 Codex 安装残留；本仓库不再安装 Codex。 */
+function updateCodexPlusPlusScript(_scriptBody, uninstall = false, _codexExe = "") {
   const paths = codexPlusPlusPaths();
   const userPaths = codexPlusUserScriptPaths();
-  fs.mkdirSync(paths.root, { recursive: true });
-  let data = { enabled: true, name: "PromptSpark Codex", version: "1.3.1" };
-  if (exists(paths.registry)) {
-    try { data = { ...data, ...JSON.parse(fs.readFileSync(paths.registry, "utf8")) }; } catch { /* reset malformed registry */ }
+  if (!uninstall) {
+    return { changed: false, action: "skipped", path: userPaths.script };
   }
-
-  if (uninstall) {
-    fs.rmSync(paths.script, { force: true });
-    fs.rmSync(paths.host, { force: true });
-    fs.rmSync(paths.registry, { force: true });
-    fs.rmSync(paths.runtime, { force: true });
-    fs.rmSync(paths.ensureProxy, { force: true });
-    fs.rmSync(paths.proxy, { force: true });
-    fs.rmSync(userPaths.script, { force: true });
-    updateCodexUserScriptsRegistry(true);
-    try { fs.rmSync(path.join(desktopPath(), "PromptSpark Codex.lnk"), { force: true }); } catch { /* ignore */ }
-    logStep("✓ 已移除 Codex++ 用户脚本与本地代理文件");
-    return { changed: true, action: "removed", path: userPaths.script };
-  }
-
-  logStep("部署 Codex 本地代理运行时 …");
-  deployRuntimeFiles(paths.root);
-  if (exists(CODEX_RUNTIME_JS)) {
-    fs.copyFileSync(CODEX_RUNTIME_JS, paths.runtime);
-  }
-  fs.writeFileSync(paths.script, scriptBody, "utf8");
-  fs.writeFileSync(
-    paths.registry,
-    JSON.stringify({ ...data, exe: codexExe || "", script: paths.script, proxy: paths.proxy }, null, 2),
-    "utf8",
-  );
-
-  // Primary: Codex++ user plugin loads with Codex, then wakes local proxy.
-  logStep("写入 Codex++ 用户脚本（随插件加载启动代理）…");
-  fs.mkdirSync(userPaths.scriptsDir, { recursive: true });
-  fs.writeFileSync(userPaths.script, scriptBody, "utf8");
-  updateCodexUserScriptsRegistry(false);
-  registerSharedProtocolHandler();
-
-  // Remove legacy shortcut launcher approach.
-  try { fs.rmSync(path.join(desktopPath(), "PromptSpark Codex.lnk"), { force: true }); } catch { /* ignore */ }
+  fs.rmSync(paths.script, { force: true });
   fs.rmSync(paths.host, { force: true });
-
-  if (!exists(path.join(winEnvPaths().home, ".codex-session-delete")) &&
-      !exists(path.join(process.env.LOCALAPPDATA || "", "com.bigpizzav3.codexplusplus.manager"))) {
-    console.warn("⚠ 未检测到 Codex++；请安装 Codex++（launchMode=patch）后用户脚本才会随 Codex 自动加载");
-  } else {
-    logStep(`✓ Codex++ 用户脚本已启用 → ${userPaths.script}`);
+  fs.rmSync(paths.registry, { force: true });
+  fs.rmSync(paths.runtime, { force: true });
+  fs.rmSync(paths.ensureProxy, { force: true });
+  fs.rmSync(paths.proxy, { force: true });
+  fs.rmSync(userPaths.script, { force: true });
+  updateCodexUserScriptsRegistry(true);
+  try {
+    fs.rmSync(path.join(desktopPath(), "PromptSpark Codex.lnk"), { force: true });
+  } catch {
+    /* ignore */
   }
-  return { changed: true, action: "installed", path: userPaths.script };
+  logStep("✓ 已移除 Codex++ 用户脚本与本地代理文件");
+  return { changed: true, action: "removed", path: userPaths.script };
 }
 
 function ensureBuilt() {
@@ -1051,7 +888,7 @@ function launchApp(exePath) {
 
 async function ensureProxyRunning() {
   if (!exists(PROXY_JS)) {
-    console.warn("⚠ 未找到 proxy.mjs，Cursor/Devin 的 API 请求可能失败（CORS）");
+    console.warn("⚠ 未找到 proxy.mjs，Cursor 的 API 请求可能失败（CORS）");
     return false;
   }
   console.log(`检查本地 LLM 代理 (127.0.0.1:${PROXY_PORT}) …`);
@@ -1210,23 +1047,8 @@ async function applyPatches(selected, targets, scriptBody) {
   for (const id of selected) {
     const t = targets[id];
     try {
-      if (id === "codex") {
-        // Codex 已改由 Codex++ 内置 PromptSpark；本安装器不再写入 Codex++ user_scripts。
-        if (uninstallMode) {
-          logStep(`清理旧版 ${t.label} 安装残留 …`);
-          const result = updateCodexPlusPlusScript(scriptBody, true, t.exe);
-          results.push({ id, ...result });
-          logStep(`✓ ${t.label}: ${result.action}`);
-        } else {
-          console.warn(
-            "⚠ Codex 已改由 Codex++ 内置 PromptSpark 提供；请安装/更新 Codex++，本仓库仅支持 Cursor。",
-          );
-          results.push({ id, skipped: true, action: "skipped-codex-moved-to-codexplusplus" });
-        }
-        continue;
-      }
       if (!t.workbench || !exists(t.workbench)) {
-        throw new Error("未找到可注入的 workbench.html（请确认已安装原生应用）");
+        throw new Error("未找到可注入的 workbench.html（请确认已安装 Cursor）");
       }
       logStep(`${uninstallMode ? "卸载" : "注入"} ${t.label} workbench …`);
       const r = await withWriteRetry(() => patchWorkbench(t.workbench, scriptBody, uninstallMode));
@@ -1245,7 +1067,13 @@ async function applyPatches(selected, targets, scriptBody) {
       results.push({ id, error: error.message });
     }
   }
+  // 卸载时顺带清理旧版 PromptSpark 写进 Codex++ 的残留（Codex 请改用 Codex++）
   if (uninstallMode) {
+    try {
+      updateCodexPlusPlusScript(null, true);
+    } catch {
+      /* ignore legacy cleanup failures */
+    }
     refreshProtocolAfterHostChange();
   }
   return results;
@@ -1322,8 +1150,8 @@ async function main() {
 
   console.log("\n完成。交互：左键优化 / 再点还原 / 右键或 Alt+点击打开设置。");
   if (!uninstallMode) {
-    console.log(`API 请求经本地代理 http://127.0.0.1:${PROXY_PORT}（Electron 宿主需此代理绕过 CORS）。`);
-    console.log("Cursor：代理由扩展随进程启动；Codex：由 Codex++ 用户脚本加载时唤醒。");
+    console.log(`API 请求经本地代理 http://127.0.0.1:${PROXY_PORT}（Cursor 需此代理绕过 CORS）。`);
+    console.log("代理由 Cursor 扩展随进程启动。Codex 用户请使用 Codex++。");
   }
   if (results.some((r) => r.error)) process.exit(1);
   if (ELEVATED_CHILD && process.platform === "win32") {
