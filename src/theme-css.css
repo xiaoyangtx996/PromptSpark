@@ -664,9 +664,42 @@
 
 [${PANEL_ATTR}].cpo-apple .cpo-sheet-foot {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
   border-bottom: none;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-sheet-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-github {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  color: #1d1d1f;
+  background: rgba(0, 0, 0, 0.05);
+  text-decoration: none;
+  transition: background 120ms ease, transform 100ms ease, color 120ms ease;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-github:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: #000;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-github:active {
+  transform: scale(0.96);
+}
+[${PANEL_ATTR}].cpo-apple .cpo-github-icon {
+  display: block;
 }
 
 [${PANEL_ATTR}].cpo-apple .cpo-btn {

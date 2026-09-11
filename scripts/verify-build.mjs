@@ -26,6 +26,13 @@ const ok = {
     s.includes("openContinueCommandMenu") &&
     s.includes("onContinueButtonContextMenu") &&
     s.includes("左键发送"),
+  continueWrite:
+    s.includes("writeComposerTextForCommand") &&
+    s.includes("writeViaPasteEvent") &&
+    s.includes("isComposerGenerating") &&
+    !s.includes("未能写入") &&
+    s.includes("Single path only"),
+  githubLink: s.includes("cpo-github") && s.includes("https://github.com/xiaoyangtx996/PromptSpark"),
   shortEnsure: /function ensureSparkleButton\(\) \{\s*if \(typeof refreshHost === "function"\) refreshHost\(\);\s*ensureWorkbenchSparkleButton\(\);\s*\}/.test(
     s,
   ),

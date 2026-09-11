@@ -1229,7 +1229,9 @@ author: PromptSpark
     try {
       const dt = new DataTransfer();
       dt.setData("text/plain", text);
+      input.focus?.();
       selectElementContents(input);
+      document.execCommand?.("selectAll", false, null);
       document.execCommand?.("delete", false, null);
       const before = new InputEvent("beforeinput", {
         bubbles: true,
@@ -1244,6 +1246,8 @@ author: PromptSpark
         clipboardData: dt,
       });
       input.dispatchEvent(paste);
+      // Do NOT also insertText here — ProseMirror often applies paste async;
+      // a sync insertText in the same turn duplicates content (e.g. 「继续继续」).
       return true;
     } catch (_) {
       return false;
@@ -1267,18 +1271,21 @@ author: PromptSpark
 
     let replaced = false;
     try {
-      replaced = !!(document.execCommand?.("selectAll", false, null) && document.execCommand?.("insertText", false, next));
+      document.execCommand?.("selectAll", false, null);
+      document.execCommand?.("delete", false, null);
+      replaced = !!document.execCommand?.("insertText", false, next);
     } catch (_) {
       replaced = false;
     }
     if (!replaced) {
+      // Fallback: paste only (no insertText after) to avoid double write
       replaced = writeViaPasteEvent(input, next);
     }
     if (!replaced) {
       try {
         input.textContent = next;
         dispatchInputEvents(input);
-        replaced = normalizeText(readComposerText(input)).length > 0;
+        replaced = normalizeText(readComposerText(input)) === next;
       } catch (_) {
         replaced = false;
       }
@@ -1287,6 +1294,34 @@ author: PromptSpark
     }
     if (!replaced) return { ok: false, reason: "editor-write-unsupported" };
     return { ok: true, input, next, token };
+  }
+
+  /** Shortcut command: exactly one write path, then caller sends. */
+  async function writeComposerTextForCommand(text, input = findComposerInput()) {
+    const next = normalizeText(text);
+    let target = input instanceof HTMLElement ? input : findComposerInput();
+    if (!(target instanceof HTMLElement)) return { ok: false, reason: "input-not-found" };
+
+    target.focus?.();
+    if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
+      setNativeValue(target, next);
+      dispatchInputEvents(target);
+    } else {
+      // Single path only: selectAll + delete + insertText (never paste+insertText)
+      selectElementContents(target);
+      try {
+        document.execCommand?.("selectAll", false, null);
+        document.execCommand?.("delete", false, null);
+        document.execCommand?.("insertText", false, next);
+      } catch (_) {
+        /* ignore */
+      }
+      dispatchInputEvents(target);
+    }
+    await afterEditorPaint();
+    await new Promise((resolve) => window.setTimeout(resolve, 40));
+    target = findComposerInput() || target;
+    return { ok: true, input: target, verified: normalizeText(readComposerText(target)) };
   }
 
   function copyTextFallback(text) {
@@ -2177,9 +2212,42 @@ author: PromptSpark
 
 [${PANEL_ATTR}].cpo-apple .cpo-sheet-foot {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
   border-bottom: none;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-sheet-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-github {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  color: #1d1d1f;
+  background: rgba(0, 0, 0, 0.05);
+  text-decoration: none;
+  transition: background 120ms ease, transform 100ms ease, color 120ms ease;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-github:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: #000;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-github:active {
+  transform: scale(0.96);
+}
+[${PANEL_ATTR}].cpo-apple .cpo-github-icon {
+  display: block;
 }
 
 [${PANEL_ATTR}].cpo-apple .cpo-btn {
@@ -2545,6 +2613,36 @@ author: PromptSpark
     return false;
   }
 
+  function isComposerGenerating(input = findComposerInput()) {
+    const roots = [];
+    if (typeof findComposerSendScopes === "function") {
+      try {
+        roots.push(...findComposerSendScopes(input));
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    const sparkle = document.querySelector(`[${BUTTON_ATTR}]`);
+    if (sparkle?.parentElement) roots.push(sparkle.parentElement);
+    const chrome = sparkle?.closest?.("[class*='composer'], form, footer, [class*='chat']");
+    if (chrome) roots.push(chrome);
+    const seen = new Set();
+    for (const root of roots) {
+      if (!(root instanceof Element) || seen.has(root)) continue;
+      seen.add(root);
+      for (const el of Array.from(root.querySelectorAll("button, [role='button']"))) {
+        if (!(el instanceof HTMLElement) || !isVisible(el)) continue;
+        if (el.hasAttribute?.(BUTTON_ATTR) || el.hasAttribute?.(CONTINUE_BUTTON_ATTR)) continue;
+        if (isStopControl(el)) return true;
+        if (el.querySelector?.(".codicon-debug-stop, .codicon-stop-circle, [class*='codicon-debug-stop'], [class*='codicon-stop']")) {
+          const label = elementLabel(el);
+          if (!/send|发送|提交/i.test(label)) return true;
+        }
+      }
+    }
+    return false;
+  }
+
   function isNotificationControl(el) {
     if (!(el instanceof Element)) return false;
     const label = `${elementLabel(el)} ${el.getAttribute("aria-label") || ""} ${el.getAttribute("title") || ""}`;
@@ -2757,25 +2855,29 @@ author: PromptSpark
         showToast("未找到对话输入框", "error");
         return;
       }
-      const writeResult = writeComposerText(payload, input);
+      if (isComposerGenerating(input)) {
+        showToast(`当前正在生成，请稍后再点「${label}」`, "warn");
+        return;
+      }
+      // Fire-and-send: no write verification — shortcut = fill then send
+      const writeResult = await writeComposerTextForCommand(payload, input);
       if (!writeResult.ok) {
-        showToast("无法写入输入框", "error");
+        showToast("未找到对话输入框", "error");
         return;
       }
-      await afterEditorPaint();
-      const active = findComposerInput() || input;
-      const verified = normalizeText(readComposerText(active));
-      if (verified !== payload && verified.trim() !== payload.trim()) {
-        showToast(`未能写入「${label}」`, "error");
-        return;
+      runtime.lastWrittenText = payload;
+      const active = findComposerInput() || writeResult.input || input;
+      let sent = clickComposerSend(active);
+      if (!sent.ok && sent.reason !== "generating") {
+        // Send button sometimes enables one frame late after ProseMirror update
+        await new Promise((resolve) => window.setTimeout(resolve, 80));
+        sent = clickComposerSend(findComposerInput() || active);
       }
-      runtime.lastWrittenText = verified;
-      const sent = clickComposerSend(active);
       if (!sent.ok) {
         if (sent.reason === "generating") {
           showToast(`当前正在生成，请稍后再点「${label}」`, "warn");
         } else {
-          showToast(`已写入「${label}」，但未找到发送按钮`, "warn");
+          showToast(`已填入「${label}」，请手动发送`, "warn");
         }
       }
     } finally {
@@ -3798,6 +3900,7 @@ author: PromptSpark
     { id: "commands", label: "快捷命令" },
     { id: "model", label: "模型配置" },
   ];
+  const GITHUB_URL = "https://github.com/xiaoyangtx996/PromptSpark";
 
   function cpoEl(tag, attrs, children) {
     const el = document.createElement(tag);
@@ -3835,6 +3938,24 @@ author: PromptSpark
     path.setAttribute("stroke-width", "1.6");
     path.setAttribute("stroke-linecap", "round");
     path.setAttribute("stroke-linejoin", "round");
+    svg.appendChild(path);
+    return svg;
+  }
+
+  function cpoGitHubIcon() {
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("class", "cpo-github-icon");
+    svg.setAttribute("viewBox", "0 0 16 16");
+    svg.setAttribute("width", "16");
+    svg.setAttribute("height", "16");
+    svg.setAttribute("aria-hidden", "true");
+    const path = document.createElementNS(svgNS, "path");
+    path.setAttribute(
+      "d",
+      "M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z",
+    );
+    path.setAttribute("fill", "currentColor");
     svg.appendChild(path);
     return svg;
   }
@@ -4453,11 +4574,29 @@ author: PromptSpark
       mainTabBar,
       cpoEl("div", { className: "cpo-pane-host" }, [paneStyles, paneCommands, paneModel]),
       cpoEl("footer", { className: "cpo-sheet-foot" }, [
-        cpoEl("button", { type: "button", className: "cpo-btn", "data-cpo-action": "close", text: "取消" }),
-        cpoEl("button", { type: "button", className: "cpo-btn cpo-btn-fill", "data-cpo-action": "save", text: "存储" }),
+        cpoEl(
+          "a",
+          {
+            className: "cpo-github",
+            href: GITHUB_URL,
+            target: "_blank",
+            rel: "noopener noreferrer",
+            title: "GitHub · PromptSpark",
+            "aria-label": "打开 PromptSpark GitHub",
+          },
+          [cpoGitHubIcon()],
+        ),
+        cpoEl("div", { className: "cpo-sheet-actions" }, [
+          cpoEl("button", { type: "button", className: "cpo-btn", "data-cpo-action": "close", text: "取消" }),
+          cpoEl("button", { type: "button", className: "cpo-btn cpo-btn-fill", "data-cpo-action": "save", text: "存储" }),
+        ]),
       ]),
     ]);
     overlay.appendChild(card);
+
+    overlay.querySelector(".cpo-github")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
 
     overlay.addEventListener("click", (event) => {
       if (event.target === overlay) {

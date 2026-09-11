@@ -454,7 +454,14 @@ src = src.replace(
     }
     return { ok: true, input, next, token };
   }`,
-  `function selectElementContents(el) {
+  `/* writeComposerText patched in source */`,
+);
+
+// Prefer source-owned ProseMirror writers when already present.
+if (!src.includes("function writeViaPasteEvent(")) {
+  src = src.replace(
+    `/* writeComposerText patched in source */`,
+    `function selectElementContents(el) {
     try {
       const selection = window.getSelection?.();
       const range = document.createRange();
@@ -520,7 +527,7 @@ src = src.replace(
       try {
         input.textContent = next;
         dispatchInputEvents(input);
-        replaced = normalizeText(readComposerText(input)).length > 0;
+        replaced = normalizeText(readComposerText(input)) === next;
       } catch (_) {
         replaced = false;
       }
@@ -529,9 +536,16 @@ src = src.replace(
     }
     if (!replaced) return { ok: false, reason: "editor-write-unsupported" };
     return { ok: true, input, next, token };
-  }
+  }`,
+  );
+} else {
+  src = src.replace(`/* writeComposerText patched in source */`, ``);
+}
 
-  function copyTextFallback(text) {
+if (!src.includes("function copyTextFallback(")) {
+  src = src.replace(
+    `function afterEditorPaint() {`,
+    `function copyTextFallback(text) {
     const value = normalizeText(text);
     try {
       if (navigator.clipboard?.writeText) {
@@ -557,8 +571,11 @@ src = src.replace(
         resolve(false);
       }
     });
-  }`,
-);
+  }
+
+  function afterEditorPaint() {`,
+  );
+}
 
 src = src.replace(
   `async function writeComposerTextWithFallback(text, input = findComposerInput()) {
@@ -975,6 +992,7 @@ const checks = [
   ["workbench ensure", src.includes("ensureWorkbenchSparkleButton")],
   ["alt settings", src.includes("event.altKey")],
   ["continue button", src.includes("CONTINUE_BUTTON_ATTR") && src.includes("runContinueAndSend")],
+  ["continue write strict", src.includes("writeComposerTextForCommand") && src.includes("writeViaPasteEvent")],
   ["continue menu", src.includes("CONTINUE_MENU_ATTR") && src.includes("openContinueCommandMenu")],
   ["continue left of sparkle", src.includes("placeContinueBeforeSparkle")],
   ["composer send scoped", src.includes("findCursorComposerSendButton") && src.includes("isNotificationControl")],

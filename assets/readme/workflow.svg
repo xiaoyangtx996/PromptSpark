@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1200 180" role="img" aria-labelledby="wtitle wdesc">
+  <title id="wtitle">PromptSpark workflow</title>
+  <desc id="wdesc">Install, configure model and shortcuts, then optimize or send commands in Composer.</desc>
+  <rect width="1200" height="180" rx="12" fill="#111315"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif">
+    <g transform="translate(40 36)">
+      <rect width="340" height="108" rx="10" fill="#1A1E24" stroke="#343A44"/>
+      <text x="24" y="36" fill="#FFB000" font-size="18" font-weight="700">01 Install</text>
+      <text x="24" y="68" fill="#F5F6F8" font-size="20" font-weight="600">Inject into Cursor</text>
+      <text x="24" y="96" fill="#8B929C" font-size="16">One-line PowerShell</text>
+    </g>
+    <g transform="translate(430 36)">
+      <rect width="340" height="108" rx="10" fill="#1A1E24" stroke="#343A44"/>
+      <text x="24" y="36" fill="#FFB000" font-size="18" font-weight="700">02 Configure</text>
+      <text x="24" y="68" fill="#F5F6F8" font-size="20" font-weight="600">Model and shortcuts</text>
+      <text x="24" y="96" fill="#8B929C" font-size="16">Right-click spark settings</text>
+    </g>
+    <g transform="translate(820 36)">
+      <rect width="340" height="108" rx="10" fill="#1A1E24" stroke="#343A44"/>
+      <text x="24" y="36" fill="#4C8DFF" font-size="18" font-weight="700">03 Use</text>
+      <text x="24" y="68" fill="#F5F6F8" font-size="20" font-weight="600">Optimize, send, switch</text>
+      <text x="24" y="96" fill="#8B929C" font-size="16">Spark / left-click / right-click</text>
+    </g>
+  </g>
+</svg>

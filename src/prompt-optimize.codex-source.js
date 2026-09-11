@@ -1177,6 +1177,48 @@ author: Codex++ Community
     element.dispatchEvent(new Event("change", { bubbles: true, cancelable: true }));
   }
 
+  function selectElementContents(el) {
+    try {
+      const selection = window.getSelection?.();
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      selection?.removeAllRanges?.();
+      selection?.addRange?.(range);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function writeViaPasteEvent(input, text) {
+    try {
+      const dt = new DataTransfer();
+      dt.setData("text/plain", text);
+      input.focus?.();
+      selectElementContents(input);
+      document.execCommand?.("selectAll", false, null);
+      document.execCommand?.("delete", false, null);
+      const before = new InputEvent("beforeinput", {
+        bubbles: true,
+        cancelable: true,
+        inputType: "insertFromPaste",
+        data: text,
+      });
+      input.dispatchEvent(before);
+      const paste = new ClipboardEvent("paste", {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: dt,
+      });
+      input.dispatchEvent(paste);
+      // Do NOT also insertText here — ProseMirror often applies paste async;
+      // a sync insertText in the same turn duplicates content (e.g. 「继续继续」).
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function writeComposerText(text, input = findComposerInput()) {
     if (!(input instanceof HTMLElement)) return { ok: false, reason: "input-not-found" };
     const next = normalizeText(text);
@@ -1186,29 +1228,65 @@ author: Codex++ Community
       input.focus();
       setNativeValue(input, next);
       dispatchInputEvents(input);
-    } else {
-      input.focus();
+      return { ok: true, input, next, token };
+    }
+
+    input.focus();
+    selectElementContents(input);
+
+    let replaced = false;
+    try {
+      document.execCommand?.("selectAll", false, null);
+      document.execCommand?.("delete", false, null);
+      replaced = !!document.execCommand?.("insertText", false, next);
+    } catch (_) {
+      replaced = false;
+    }
+    if (!replaced) {
+      // Fallback: paste only (no insertText after) to avoid double write
+      replaced = writeViaPasteEvent(input, next);
+    }
+    if (!replaced) {
       try {
-        const selection = window.getSelection?.();
-        const range = document.createRange();
-        range.selectNodeContents(input);
-        selection?.removeAllRanges?.();
-        selection?.addRange?.(range);
-      } catch (_) {
-        /* ignore */
-      }
-      let replaced = false;
-      try {
-        replaced = document.execCommand?.("selectAll", false, null) && document.execCommand?.("insertText", false, next);
+        input.textContent = next;
+        dispatchInputEvents(input);
+        replaced = normalizeText(readComposerText(input)) === next;
       } catch (_) {
         replaced = false;
       }
-      if (!replaced) {
-        return { ok: false, reason: "editor-write-unsupported" };
-      }
+    } else {
       dispatchInputEvents(input);
     }
+    if (!replaced) return { ok: false, reason: "editor-write-unsupported" };
     return { ok: true, input, next, token };
+  }
+
+  /** Shortcut command: exactly one write path, then caller sends. */
+  async function writeComposerTextForCommand(text, input = findComposerInput()) {
+    const next = normalizeText(text);
+    let target = input instanceof HTMLElement ? input : findComposerInput();
+    if (!(target instanceof HTMLElement)) return { ok: false, reason: "input-not-found" };
+
+    target.focus?.();
+    if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
+      setNativeValue(target, next);
+      dispatchInputEvents(target);
+    } else {
+      // Single path only: selectAll + delete + insertText (never paste+insertText)
+      selectElementContents(target);
+      try {
+        document.execCommand?.("selectAll", false, null);
+        document.execCommand?.("delete", false, null);
+        document.execCommand?.("insertText", false, next);
+      } catch (_) {
+        /* ignore */
+      }
+      dispatchInputEvents(target);
+    }
+    await afterEditorPaint();
+    await new Promise((resolve) => window.setTimeout(resolve, 40));
+    target = findComposerInput() || target;
+    return { ok: true, input: target, verified: normalizeText(readComposerText(target)) };
   }
 
   function afterEditorPaint() {
@@ -1598,6 +1676,36 @@ author: Codex++ Community
     return false;
   }
 
+  function isComposerGenerating(input = findComposerInput()) {
+    const roots = [];
+    if (typeof findComposerSendScopes === "function") {
+      try {
+        roots.push(...findComposerSendScopes(input));
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    const sparkle = document.querySelector(`[${BUTTON_ATTR}]`);
+    if (sparkle?.parentElement) roots.push(sparkle.parentElement);
+    const chrome = sparkle?.closest?.("[class*='composer'], form, footer, [class*='chat']");
+    if (chrome) roots.push(chrome);
+    const seen = new Set();
+    for (const root of roots) {
+      if (!(root instanceof Element) || seen.has(root)) continue;
+      seen.add(root);
+      for (const el of Array.from(root.querySelectorAll("button, [role='button']"))) {
+        if (!(el instanceof HTMLElement) || !isVisible(el)) continue;
+        if (el.hasAttribute?.(BUTTON_ATTR) || el.hasAttribute?.(CONTINUE_BUTTON_ATTR)) continue;
+        if (isStopControl(el)) return true;
+        if (el.querySelector?.(".codicon-debug-stop, .codicon-stop-circle, [class*='codicon-debug-stop'], [class*='codicon-stop']")) {
+          const label = elementLabel(el);
+          if (!/send|发送|提交/i.test(label)) return true;
+        }
+      }
+    }
+    return false;
+  }
+
   function isNotificationControl(el) {
     if (!(el instanceof Element)) return false;
     const label = `${elementLabel(el)} ${el.getAttribute("aria-label") || ""} ${el.getAttribute("title") || ""}`;
@@ -1810,25 +1918,29 @@ author: Codex++ Community
         showToast("未找到对话输入框", "error");
         return;
       }
-      const writeResult = writeComposerText(payload, input);
+      if (isComposerGenerating(input)) {
+        showToast(`当前正在生成，请稍后再点「${label}」`, "warn");
+        return;
+      }
+      // Fire-and-send: no write verification — shortcut = fill then send
+      const writeResult = await writeComposerTextForCommand(payload, input);
       if (!writeResult.ok) {
-        showToast("无法写入输入框", "error");
+        showToast("未找到对话输入框", "error");
         return;
       }
-      await afterEditorPaint();
-      const active = findComposerInput() || input;
-      const verified = normalizeText(readComposerText(active));
-      if (verified !== payload && verified.trim() !== payload.trim()) {
-        showToast(`未能写入「${label}」`, "error");
-        return;
+      runtime.lastWrittenText = payload;
+      const active = findComposerInput() || writeResult.input || input;
+      let sent = clickComposerSend(active);
+      if (!sent.ok && sent.reason !== "generating") {
+        // Send button sometimes enables one frame late after ProseMirror update
+        await new Promise((resolve) => window.setTimeout(resolve, 80));
+        sent = clickComposerSend(findComposerInput() || active);
       }
-      runtime.lastWrittenText = verified;
-      const sent = clickComposerSend(active);
       if (!sent.ok) {
         if (sent.reason === "generating") {
           showToast(`当前正在生成，请稍后再点「${label}」`, "warn");
         } else {
-          showToast(`已写入「${label}」，但未找到发送按钮`, "warn");
+          showToast(`已填入「${label}」，请手动发送`, "warn");
         }
       }
     } finally {
