@@ -30,7 +30,7 @@ const PATCH_END = "<!-- /PROMPTSPARK-PATCH -->";
 const LEGACY_PATCH_BEGIN = "<!-- PROMPT-OPTIMIZE-PATCH -->";
 const LEGACY_PATCH_END = "<!-- /PROMPT-OPTIMIZE-PATCH -->";
 const PATCH_ASSET = "promptspark.js";
-const APP_VERSION = "1.3.5";
+const APP_VERSION = "1.3.6";
 
 function promptSparkDataRoot() {
   const { localAppData, home } = winEnvPaths();

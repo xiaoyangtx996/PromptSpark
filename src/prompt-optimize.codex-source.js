@@ -15,7 +15,9 @@ author: Codex++ Community
   const STYLE_ID = "codex-plus-prompt-optimize-style";
   const BUTTON_ATTR = "data-codex-prompt-optimize";
   const CONTINUE_BUTTON_ATTR = "data-codex-prompt-continue";
+  const CONTINUE_MENU_ATTR = "data-codex-prompt-continue-menu";
   const CONTINUE_PROMPT_TEXT = "继续";
+  const DEFAULT_COMMAND_ID = "continue";
   const PANEL_ATTR = "data-codex-prompt-optimize-panel";
   const TOAST_ATTR = "data-codex-prompt-optimize-toast";
   const FLOAT_HOST_ATTR = "data-codex-prompt-optimize-float";
@@ -122,7 +124,52 @@ author: Codex++ Community
       model: DEFAULT_MODELS.openai,
       style: "structured",
       systemPrompts: { ...DEFAULT_SYSTEM_PROMPTS },
+      activeCommandId: DEFAULT_COMMAND_ID,
+      commands: defaultCommandList(),
     };
+  }
+
+  function defaultCommandList() {
+    return [{ id: DEFAULT_COMMAND_ID, title: CONTINUE_PROMPT_TEXT, content: CONTINUE_PROMPT_TEXT }];
+  }
+
+  function newCommandId() {
+    return `cmd_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  }
+
+  function normalizeCommands(list) {
+    const raw = Array.isArray(list) ? list : [];
+    const out = [];
+    const seen = new Set();
+    for (let i = 0; i < raw.length; i += 1) {
+      const item = raw[i];
+      if (!item || typeof item !== "object") continue;
+      let id = typeof item.id === "string" && item.id.trim() ? item.id.trim() : `cmd_${i}`;
+      if (seen.has(id)) id = `${id}_${i}`;
+      seen.add(id);
+      const title = typeof item.title === "string" && item.title.trim() ? item.title.trim() : CONTINUE_PROMPT_TEXT;
+      const content =
+        typeof item.content === "string" && item.content.trim()
+          ? item.content
+          : typeof item.title === "string" && item.title.trim()
+            ? item.title
+            : CONTINUE_PROMPT_TEXT;
+      out.push({ id, title, content });
+    }
+    if (!out.length) return defaultCommandList();
+    if (!out.some((c) => c.id === DEFAULT_COMMAND_ID)) {
+      out.unshift(...defaultCommandList());
+    }
+    return out;
+  }
+
+  function getActiveCommand(settings = loadSettings()) {
+    const commands = normalizeCommands(settings?.commands);
+    const id =
+      typeof settings?.activeCommandId === "string" && settings.activeCommandId.trim()
+        ? settings.activeCommandId.trim()
+        : DEFAULT_COMMAND_ID;
+    return commands.find((c) => c.id === id) || commands[0] || defaultCommandList()[0];
   }
 
   function loadSettings() {
@@ -151,6 +198,12 @@ author: Codex++ Community
             ? parsed.systemPrompts.coding
             : DEFAULT_SYSTEM_PROMPTS.coding,
       };
+      const commands = normalizeCommands(parsed.commands);
+      let activeCommandId =
+        typeof parsed.activeCommandId === "string" && parsed.activeCommandId.trim()
+          ? parsed.activeCommandId.trim()
+          : DEFAULT_COMMAND_ID;
+      if (!commands.some((c) => c.id === activeCommandId)) activeCommandId = commands[0].id;
       return {
         protocol,
         baseUrl: typeof parsed.baseUrl === "string" && parsed.baseUrl.trim() ? parsed.baseUrl.trim() : DEFAULT_BASE_URLS[protocol],
@@ -158,6 +211,8 @@ author: Codex++ Community
         model: typeof parsed.model === "string" && parsed.model.trim() ? parsed.model.trim() : DEFAULT_MODELS[protocol],
         style,
         systemPrompts,
+        commands,
+        activeCommandId,
       };
     } catch (_) {
       return base;
@@ -165,7 +220,20 @@ author: Codex++ Community
   }
 
   function saveSettings(settings) {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    const commands = normalizeCommands(settings?.commands);
+    let activeCommandId =
+      typeof settings?.activeCommandId === "string" && settings.activeCommandId.trim()
+        ? settings.activeCommandId.trim()
+        : DEFAULT_COMMAND_ID;
+    if (!commands.some((c) => c.id === activeCommandId)) activeCommandId = commands[0].id;
+    localStorage.setItem(
+      SETTINGS_KEY,
+      JSON.stringify({
+        ...settings,
+        commands,
+        activeCommandId,
+      }),
+    );
   }
 
   function isConfigured(settings = loadSettings()) {
@@ -634,32 +702,6 @@ author: Codex++ Community
     return null;
   }
 
-  function findStructuralContextGroup(footer) {
-    if (!(footer instanceof Element)) return null;
-    const triggers = Array.from(footer.querySelectorAll("[data-codex-intelligence-trigger]"));
-    for (const trigger of triggers) {
-      if (isInSidebar(trigger)) continue;
-      let node = trigger.parentElement;
-      while (node && node !== footer) {
-        const className = classNameText(node);
-        if (className.includes("items-center") && (node.querySelector(".h-token-button-composer") || node.querySelector("[class*='h-token-button-composer']") || node.querySelector("button, [role='button']"))) {
-          const reasoningItem = directChildContaining(node, trigger);
-          const children = Array.from(node.children);
-          const modelItem =
-            children
-              .slice(0, Math.max(0, children.indexOf(reasoningItem)))
-              .reverse()
-              .find((child) => isModelControl(child) || scoreModelCandidate(child, footer.getBoundingClientRect()) > 28) || null;
-          if (modelItem && reasoningItem && !isInSidebar(modelItem) && !isFolderOrPathControl(modelItem)) {
-            return { group: node, modelItem, reasoningItem, strategy: "structural-reasoning" };
-          }
-        }
-        node = node.parentElement;
-      }
-    }
-    return null;
-  }
-
   function isInSidebar(node) {
     if (!(node instanceof Element)) return false;
     if (node.closest?.("[data-app-action-sidebar-thread-id], [data-app-action-sidebar-thread-active], [data-sidebar], aside, nav")) {
@@ -774,22 +816,6 @@ author: Codex++ Community
     const ranked = candidates
       .map((el, index) => ({ el, index, score: scoreComposerRegion(el) }))
       .filter((row) => row.score >= 30)
-      .sort((a, b) => b.score - a.score || a.index - b.index);
-    return ranked[0]?.el || null;
-  }
-
-  function findBestModelControl(scope) {
-    const root = scope instanceof Element ? scope : document;
-    // Prefer action-row local search
-    if (root !== document) {
-      const inRow = findModelControlInRow(root);
-      if (inRow) return inRow;
-    }
-    const rowRect = root.getBoundingClientRect?.() || null;
-    const candidates = collectClickables(root);
-    const ranked = candidates
-      .map((el, index) => ({ el, index, score: scoreModelCandidate(el, rowRect) }))
-      .filter((row) => row.score >= 28)
       .sort((a, b) => b.score - a.score || a.index - b.index);
     return ranked[0]?.el || null;
   }
@@ -1409,10 +1435,6 @@ author: Codex++ Community
         color: #a1a1aa;
         font-size: 12px;
       }
-      [${PANEL_ATTR}] .cpo-grid {
-        display: grid;
-        gap: 10px;
-      }
       [${PANEL_ATTR}] label {
         display: grid;
         gap: 4px;
@@ -1437,18 +1459,6 @@ author: Codex++ Community
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         font-size: 12px;
       }
-      [${PANEL_ATTR}] .cpo-row {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        align-items: center;
-      }
-      [${PANEL_ATTR}] .cpo-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 8px;
-        margin-top: 14px;
-      }
       [${PANEL_ATTR}] button {
         border-radius: 8px;
         border: 1px solid rgba(255,255,255,.14);
@@ -1457,37 +1467,6 @@ author: Codex++ Community
         padding: 7px 12px;
         font: inherit;
         cursor: pointer;
-      }
-      [${PANEL_ATTR}] button.cpo-primary {
-        background: rgba(16,163,127,.25);
-        border-color: #10a37f;
-        color: #6ee7b7;
-      }
-      [${PANEL_ATTR}] button.cpo-linkish {
-        background: transparent;
-        border-color: transparent;
-        color: #93c5fd;
-        padding: 0 4px;
-      }
-      [${PANEL_ATTR}] .cpo-prompt-block {
-        border: 1px solid rgba(255,255,255,.08);
-        border-radius: 10px;
-        padding: 10px;
-        background: rgba(39,39,42,.45);
-      }
-      [${PANEL_ATTR}] .cpo-prompt-head {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 6px;
-        color: #a1a1aa;
-        font-size: 12px;
-      }
-      [${PANEL_ATTR}] .cpo-warn {
-        margin-top: 10px;
-        color: #fbbf24;
-        font-size: 11px;
-        line-height: 1.4;
       }
     `;
     document.documentElement.appendChild(style);
@@ -1550,11 +1529,27 @@ author: Codex++ Community
     button.type = "button";
     button.setAttribute(CONTINUE_BUTTON_ATTR, "true");
     button.dataset.version = SCRIPT_VERSION;
-    button.textContent = CONTINUE_PROMPT_TEXT;
-    button.setAttribute("title", "填入「继续」并发送");
-    button.setAttribute("aria-label", "填入继续并发送");
+    refreshContinueButtonAppearance(button);
     button.addEventListener("click", onContinueButtonClick);
+    button.addEventListener("contextmenu", onContinueButtonContextMenu, true);
+    button.addEventListener(
+      "auxclick",
+      (event) => {
+        if (event.button === 2) onContinueButtonContextMenu(event);
+      },
+      true,
+    );
     return button;
+  }
+
+  function refreshContinueButtonAppearance(button = document.querySelector(`[${CONTINUE_BUTTON_ATTR}]`)) {
+    if (!(button instanceof HTMLElement)) return;
+    const cmd = getActiveCommand();
+    const title = (cmd?.title || CONTINUE_PROMPT_TEXT).trim() || CONTINUE_PROMPT_TEXT;
+    if (button.textContent !== title) button.textContent = title;
+    const tip = `左键发送「${title}」· 右键切换命令`;
+    if (button.getAttribute("title") !== tip) button.setAttribute("title", tip);
+    if (button.getAttribute("aria-label") !== tip) button.setAttribute("aria-label", tip);
   }
 
   function getOrCreateContinueButton() {
@@ -1576,6 +1571,7 @@ author: Codex++ Community
   function placeContinueBeforeSparkle(sparkle) {
     if (!(sparkle instanceof HTMLElement) || !sparkle.isConnected) return null;
     const cont = getOrCreateContinueButton();
+    refreshContinueButtonAppearance(cont);
     const parent = sparkle.parentElement;
     if (!(parent instanceof HTMLElement)) return cont;
     try {
@@ -1757,8 +1753,9 @@ author: Codex++ Community
       // Only as secondary pulse if plain Enter did not clear the draft shortly after.
       window.setTimeout(() => {
         try {
+          const expected = normalizeText(getActiveCommand()?.content || CONTINUE_PROMPT_TEXT);
           const still = normalizeText(readComposerText(findComposerInput() || input));
-          if (still === CONTINUE_PROMPT_TEXT || still.trim() === CONTINUE_PROMPT_TEXT) {
+          if (still === expected || still.trim() === expected.trim()) {
             const active = findComposerInput() || input;
             active.focus();
             active.dispatchEvent(new KeyboardEvent("keydown", withCtrl));
@@ -1801,12 +1798,19 @@ author: Codex++ Community
     runtime.continueBusy = true;
     if (cont instanceof HTMLElement) cont.dataset.busy = "1";
     try {
+      const cmd = getActiveCommand();
+      const payload = normalizeText(cmd?.content || CONTINUE_PROMPT_TEXT);
+      const label = (cmd?.title || CONTINUE_PROMPT_TEXT).trim() || CONTINUE_PROMPT_TEXT;
+      if (!payload.trim()) {
+        showToast("当前快捷命令内容为空", "warn");
+        return;
+      }
       const input = findComposerInput();
       if (!(input instanceof HTMLElement)) {
         showToast("未找到对话输入框", "error");
         return;
       }
-      const writeResult = writeComposerText(CONTINUE_PROMPT_TEXT, input);
+      const writeResult = writeComposerText(payload, input);
       if (!writeResult.ok) {
         showToast("无法写入输入框", "error");
         return;
@@ -1814,17 +1818,17 @@ author: Codex++ Community
       await afterEditorPaint();
       const active = findComposerInput() || input;
       const verified = normalizeText(readComposerText(active));
-      if (verified !== CONTINUE_PROMPT_TEXT && verified.trim() !== CONTINUE_PROMPT_TEXT) {
-        showToast("未能写入「继续」", "error");
+      if (verified !== payload && verified.trim() !== payload.trim()) {
+        showToast(`未能写入「${label}」`, "error");
         return;
       }
       runtime.lastWrittenText = verified;
       const sent = clickComposerSend(active);
       if (!sent.ok) {
         if (sent.reason === "generating") {
-          showToast("当前正在生成，请稍后再点「继续」", "warn");
+          showToast(`当前正在生成，请稍后再点「${label}」`, "warn");
         } else {
-          showToast("已写入「继续」，但未找到发送按钮", "warn");
+          showToast(`已写入「${label}」，但未找到发送按钮`, "warn");
         }
       }
     } finally {
@@ -1836,7 +1840,95 @@ author: Codex++ Community
   function onContinueButtonClick(event) {
     event.preventDefault();
     event.stopPropagation();
+    closeContinueCommandMenu();
     runContinueAndSend();
+  }
+
+  function onContinueButtonContextMenu(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    openContinueCommandMenu(event);
+  }
+
+  function closeContinueCommandMenu() {
+    document.querySelectorAll(`[${CONTINUE_MENU_ATTR}]`).forEach((node) => node.remove());
+    if (runtime.continueMenuCloser) {
+      document.removeEventListener("mousedown", runtime.continueMenuCloser, true);
+      runtime.continueMenuCloser = null;
+    }
+    if (runtime.continueMenuKey) {
+      document.removeEventListener("keydown", runtime.continueMenuKey, true);
+      runtime.continueMenuKey = null;
+    }
+  }
+
+  function setActiveCommandId(id) {
+    const settings = loadSettings();
+    const commands = normalizeCommands(settings.commands);
+    const nextId = String(id || "").trim();
+    if (!nextId || !commands.some((c) => c.id === nextId)) return false;
+    saveSettings({ ...settings, activeCommandId: nextId });
+    refreshContinueButtonAppearance();
+    return true;
+  }
+
+  function openContinueCommandMenu(event) {
+    closeContinueCommandMenu();
+    const settings = loadSettings();
+    const commands = normalizeCommands(settings.commands);
+    const active = getActiveCommand(settings);
+    const menu = document.createElement("div");
+    menu.setAttribute(CONTINUE_MENU_ATTR, "true");
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", "选择快捷命令");
+
+    for (const cmd of commands) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "cpo-cmd-menu-item";
+      item.setAttribute("role", "menuitemradio");
+      item.setAttribute("aria-checked", cmd.id === active?.id ? "true" : "false");
+      item.textContent = (cmd.title || "未命名").trim() || "未命名";
+      item.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setActiveCommandId(cmd.id);
+        closeContinueCommandMenu();
+      });
+      menu.appendChild(item);
+    }
+
+    document.documentElement.appendChild(menu);
+
+    const anchor = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.querySelector(`[${CONTINUE_BUTTON_ATTR}]`);
+    const rect = anchor instanceof HTMLElement ? anchor.getBoundingClientRect() : null;
+    const mw = menu.offsetWidth || 160;
+    const mh = menu.offsetHeight || 40;
+    let left = rect ? rect.left : Number(event?.clientX) || 12;
+    let top = rect ? rect.bottom + 6 : Number(event?.clientY) || 12;
+    if (left + mw > window.innerWidth - 8) left = Math.max(8, window.innerWidth - mw - 8);
+    if (top + mh > window.innerHeight - 8) top = Math.max(8, (rect ? rect.top : top) - mh - 6);
+    menu.style.left = `${Math.round(left)}px`;
+    menu.style.top = `${Math.round(top)}px`;
+
+    runtime.continueMenuCloser = (e) => {
+      const t = e.target;
+      if (t instanceof Element && (t.closest(`[${CONTINUE_MENU_ATTR}]`) || t.closest(`[${CONTINUE_BUTTON_ATTR}]`))) {
+        return;
+      }
+      closeContinueCommandMenu();
+    };
+    runtime.continueMenuKey = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeContinueCommandMenu();
+      }
+    };
+    window.setTimeout(() => {
+      document.addEventListener("mousedown", runtime.continueMenuCloser, true);
+      document.addEventListener("keydown", runtime.continueMenuKey, true);
+    }, 0);
   }
 
   function placementLooksValid(found) {
@@ -2412,11 +2504,13 @@ author: Codex++ Community
   function onButtonContextMenu(event) {
     event.preventDefault();
     event.stopPropagation();
+    closeContinueCommandMenu();
     openSettingsPanel();
   }
 
   function closeSettingsPanel() {
     document.querySelectorAll(`[${PANEL_ATTR}]`).forEach((node) => node.remove());
+    closeContinueCommandMenu();
   }
 
   function openSettingsPanel() {
@@ -2642,7 +2736,8 @@ author: Codex++ Community
     }
     runtime.inputListeners.clear();
     closeSettingsPanel();
-    document.querySelectorAll(`[${BUTTON_ATTR}], [${CONTINUE_BUTTON_ATTR}], [${TOAST_ATTR}], [${PANEL_ATTR}], [${FLOAT_HOST_ATTR}]`).forEach((node) => node.remove());
+    closeContinueCommandMenu();
+    document.querySelectorAll(`[${BUTTON_ATTR}], [${CONTINUE_BUTTON_ATTR}], [${CONTINUE_MENU_ATTR}], [${TOAST_ATTR}], [${PANEL_ATTR}], [${FLOAT_HOST_ATTR}]`).forEach((node) => node.remove());
     runtime.button = null;
     runtime.continueButton = null;
     document.getElementById(STYLE_ID)?.remove();

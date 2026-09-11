@@ -49,6 +49,54 @@
   cursor: progress;
   pointer-events: none;
 }
+
+[${CONTINUE_MENU_ATTR}] {
+  position: fixed !important;
+  z-index: 2147483002 !important;
+  min-width: 148px;
+  max-width: min(260px, calc(100vw - 16px));
+  max-height: min(320px, calc(100vh - 16px));
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 4px !important;
+  margin: 0 !important;
+  border-radius: 10px !important;
+  background: #ffffff !important;
+  color: #1d1d1f !important;
+  border: 0 !important;
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.08),
+    0 10px 28px rgba(0, 0, 0, 0.18) !important;
+  font: 13px/1.25 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  scrollbar-width: none;
+}
+[${CONTINUE_MENU_ATTR}]::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+[${CONTINUE_MENU_ATTR}] .cpo-cmd-menu-item {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #1d1d1f;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 7px;
+  font: inherit;
+  cursor: pointer;
+}
+[${CONTINUE_MENU_ATTR}] .cpo-cmd-menu-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+[${CONTINUE_MENU_ATTR}] .cpo-cmd-menu-item[aria-checked="true"] {
+  background: rgba(0, 113, 227, 0.12);
+  color: #0071e3;
+  font-weight: 560;
+}
 [${BUTTON_ATTR}]:hover {
   opacity: 1;
   background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.12));
@@ -137,8 +185,11 @@
 
 [${PANEL_ATTR}].cpo-apple .cpo-card {
   width: min(420px, calc(100vw - 32px)) !important;
-  max-height: min(88vh, 720px) !important;
-  overflow: visible !important;
+  height: 640px !important;
+  max-height: min(88vh, 640px) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
   background: #f5f5f7 !important;
   border: 1px solid rgba(0, 0, 0, 0.1) !important;
   border-radius: 16px !important;
@@ -151,8 +202,29 @@
 
 [${PANEL_ATTR}].cpo-apple .cpo-sheet-head,
 [${PANEL_ATTR}].cpo-apple .cpo-block,
+[${PANEL_ATTR}].cpo-apple .cpo-sheet-foot,
+[${PANEL_ATTR}].cpo-apple .cpo-pane-host {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-sheet-head,
+[${PANEL_ATTR}].cpo-apple .cpo-block,
 [${PANEL_ATTR}].cpo-apple .cpo-sheet-foot {
-  padding: 14px 16px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-main-tabs {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  margin: 0 16px 8px;
+  padding: 3px !important;
+  border-radius: 9px;
+  background: rgba(118, 118, 128, 0.12);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.04);
 }
 
 [${PANEL_ATTR}].cpo-apple .cpo-sheet-head {
@@ -160,7 +232,103 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: none;
+  padding-bottom: 8px;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-main-tab {
+  flex: none;
+  appearance: none;
+  border: 0;
+  border-radius: 7px;
+  padding: 7px 4px;
+  font: 510 12px/1.15 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.01em;
+  color: rgba(60, 60, 67, 0.85);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-main-tab:hover {
+  color: #1d1d1f;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-main-tab:active {
+  transform: scale(0.98);
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-main-tab[aria-selected="true"] {
+  background: #ffffff;
+  color: #1d1d1f;
+  font-weight: 590;
+  box-shadow:
+    0 0.5px 0.5px rgba(0, 0, 0, 0.04),
+    0 1px 3px rgba(0, 0, 0, 0.08),
+    0 0 0 0.5px rgba(0, 0, 0, 0.04);
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-pane-host {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 0;
+  padding-bottom: 4px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-pane::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-pane[hidden] {
+  display: none !important;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-sheet-head,
+[${PANEL_ATTR}].cpo-apple .cpo-main-tabs,
+[${PANEL_ATTR}].cpo-apple .cpo-sheet-foot {
+  flex: 0 0 auto;
+}
+
+/* label + textarea：第一行固定标题，第二行吃掉剩余高度，避免标题与内容之间留白 */
+[${PANEL_ATTR}].cpo-apple .cpo-field.cpo-field-grow {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 4px;
+  align-content: stretch;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-field-grow > span {
+  align-self: start;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-field-grow textarea {
+  min-height: 0 !important;
+  max-height: none !important;
+  height: 100% !important;
+  align-self: stretch;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-btn-mini {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 999px;
 }
 
 [${PANEL_ATTR}].cpo-apple h2 {
@@ -200,11 +368,12 @@
   gap: 10px;
 }
 
+/* Compact default style tabs — right of「风格」 */
 [${PANEL_ATTR}].cpo-apple .cpo-block-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
 }
 
 [${PANEL_ATTR}].cpo-apple .cpo-h3 {
@@ -435,14 +604,6 @@
   background: rgba(0, 113, 227, 0.08);
 }
 
-/* Compact default style tabs — right of「风格」 */
-[${PANEL_ATTR}].cpo-apple .cpo-block-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
 [${PANEL_ATTR}].cpo-apple .cpo-segment {
   display: flex;
   align-items: stretch;
@@ -486,7 +647,9 @@
 [${PANEL_ATTR}].cpo-apple .cpo-footnote {
   margin: 0;
   font-size: 11px;
+  line-height: 1.4;
   color: #86868b !important;
+  flex: 0 0 auto;
 }
 
 [${PANEL_ATTR}].cpo-apple .cpo-warn-banner {

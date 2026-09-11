@@ -11,7 +11,7 @@ const sourcePath = path.join(root, "src", "prompt-optimize.codex-source.js");
 const adaptersPath = path.join(root, "src", "host-adapters.js");
 const settingsDomPath = path.join(root, "src", "settings-dom.js");
 const outPath = path.join(root, "dist", "prompt-optimize.js");
-const VERSION = "1.3.5";
+const VERSION = "1.3.6";
 
 let src = fs.readFileSync(sourcePath, "utf8");
 let adapters = fs.readFileSync(adaptersPath, "utf8");
@@ -62,6 +62,8 @@ src = src.replace(
       model: DEFAULT_MODELS.openai,
       style: "structured",
       systemPrompts: { ...DEFAULT_SYSTEM_PROMPTS },
+      activeCommandId: DEFAULT_COMMAND_ID,
+      commands: defaultCommandList(),
     };
   }`,
   `function defaultStyleList() {
@@ -80,6 +82,8 @@ src = src.replace(
       model: DEFAULT_MODELS.openai,
       style: "structured",
       styles: defaultStyleList(),
+      activeCommandId: DEFAULT_COMMAND_ID,
+      commands: defaultCommandList(),
     };
   }`,
 );
@@ -136,6 +140,12 @@ src = src.replace(
       }
       let style = typeof parsed.style === "string" && parsed.style.trim() ? parsed.style.trim() : "structured";
       if (!styles.some((s) => s.id === style)) style = "structured";
+      const commands = normalizeCommands(parsed.commands);
+      let activeCommandId =
+        typeof parsed.activeCommandId === "string" && parsed.activeCommandId.trim()
+          ? parsed.activeCommandId.trim()
+          : DEFAULT_COMMAND_ID;
+      if (!commands.some((c) => c.id === activeCommandId)) activeCommandId = commands[0].id;
       return {
         protocol,
         baseUrl: typeof parsed.baseUrl === "string" && parsed.baseUrl.trim() ? parsed.baseUrl.trim() : DEFAULT_BASE_URLS[protocol],
@@ -143,6 +153,8 @@ src = src.replace(
         model: typeof parsed.model === "string" && parsed.model.trim() ? parsed.model.trim() : DEFAULT_MODELS[protocol],
         style,
         styles,
+        commands,
+        activeCommandId,
       };
     } catch (_) {
       return defaultSettings();
@@ -153,10 +165,14 @@ src = src.replace(
 );
 
 src = src.replace(
+  /function saveSettings\(settings\) \{[\s\S]*?\n  \}\n\n  function isConfigured/,
   `function saveSettings(settings) {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  }`,
-  `function saveSettings(settings) {
+    const commands = normalizeCommands(settings?.commands);
+    let activeCommandId =
+      typeof settings?.activeCommandId === "string" && settings.activeCommandId.trim()
+        ? settings.activeCommandId.trim()
+        : DEFAULT_COMMAND_ID;
+    if (!commands.some((c) => c.id === activeCommandId)) activeCommandId = commands[0].id;
     const next = {
       protocol: settings?.protocol === "anthropic" ? "anthropic" : "openai",
       baseUrl: typeof settings?.baseUrl === "string" ? settings.baseUrl : "",
@@ -164,6 +180,8 @@ src = src.replace(
       model: typeof settings?.model === "string" ? settings.model : "",
       style: typeof settings?.style === "string" ? settings.style : "structured",
       styles: Array.isArray(settings?.styles) ? settings.styles : defaultStyleList(),
+      commands,
+      activeCommandId,
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
     try {
@@ -171,42 +189,9 @@ src = src.replace(
     } catch (_) {
       /* ignore */
     }
-  }`,
-);
-
-// Remove duplicate defaultSettings patch if present later
-src = src.replace(
-  `function defaultSettings() {
-    return {
-      protocol: "openai",
-      baseUrl: DEFAULT_BASE_URLS.openai,
-      apiKey: "",
-      model: DEFAULT_MODELS.openai,
-      style: "structured",
-      styles: defaultStyleList(),
-    };
   }
 
-  function defaultSettings() {
-    return {
-      protocol: "openai",
-      baseUrl: DEFAULT_BASE_URLS.openai,
-      apiKey: "",
-      model: DEFAULT_MODELS.openai,
-      style: "structured",
-      styles: defaultStyleList(),
-    };
-  }`,
-  `function defaultSettings() {
-    return {
-      protocol: "openai",
-      baseUrl: DEFAULT_BASE_URLS.openai,
-      apiKey: "",
-      model: DEFAULT_MODELS.openai,
-      style: "structured",
-      styles: defaultStyleList(),
-    };
-  }`,
+  function isConfigured`,
 );
 
 src = src.replace(
@@ -761,23 +746,6 @@ src = src.replace(
   }`,
 );
 
-src = src.replace(
-  `function onButtonClick(event) {
-    event.preventDefault();
-    event.stopPropagation();
-    if (runtime.loading) {
-      cancelOptimize();
-      return;
-    }
-    if (state.mode === "optimized") {
-      runRestore();
-      return;
-    }
-    runOptimize();
-  }`.replace("state.mode", "getThreadState().mode"),
-  `PATCH_CLICK`,
-);
-
 // Safer click patch using original source shape
 src = src.replace(
   /function onButtonClick\(event\) \{[\s\S]*?\n  \}\n\n  function onButtonContextMenu\(event\) \{[\s\S]*?\n  \}/,
@@ -840,11 +808,6 @@ src = src.replace(
   `@keyframes cpo-spin {
         from { transform: rotate(0deg); }
         to { transform: rotate(360deg); }
-      }
-      .cpo-channel-hint {
-        font-size: 12px;
-        line-height: 1.45;
-        opacity: .85;
       }
 ` + themeCss,
 );
@@ -909,15 +872,19 @@ src = src.replace(
 if (!src.includes("  function ensureSparkleButton() {")) {
   throw new Error("ensureSparkleButton marker not found");
 }
+if (!src.includes("  function bindComposerInputWatch() {")) {
+  throw new Error("bindComposerInputWatch marker not found");
+}
 src = src.replace(
-  "  function ensureSparkleButton() {",
+  /  function ensureSparkleButton\(\) \{[\s\S]*?\n  \}\n\n  function bindComposerInputWatch/,
   `${adapters}
 
   function ensureSparkleButton() {
     if (typeof refreshHost === "function") refreshHost();
     ensureWorkbenchSparkleButton();
-    return;
-`,
+  }
+
+  function bindComposerInputWatch`,
 );
 
 // Guard: icon builder must exist before createButton
@@ -1008,8 +975,11 @@ const checks = [
   ["workbench ensure", src.includes("ensureWorkbenchSparkleButton")],
   ["alt settings", src.includes("event.altKey")],
   ["continue button", src.includes("CONTINUE_BUTTON_ATTR") && src.includes("runContinueAndSend")],
+  ["continue menu", src.includes("CONTINUE_MENU_ATTR") && src.includes("openContinueCommandMenu")],
   ["continue left of sparkle", src.includes("placeContinueBeforeSparkle")],
   ["composer send scoped", src.includes("findCursorComposerSendButton") && src.includes("isNotificationControl")],
+  ["settings tabs", src.includes("cpo-main-tabs") && src.includes("快捷命令")],
+  ["commands settings", src.includes("activeCommandId") && src.includes("defaultCommandList")],
 ];
 for (const [name, ok] of checks) {
   if (!ok) throw new Error(`Build check failed: ${name}`);

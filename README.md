@@ -8,7 +8,7 @@
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-4C8DFF.svg?style=flat-square" alt="MIT License"></a>
 </p>
 
-PromptSpark 在 **Cursor** Composer 输入框旁增加一个优化按钮。写好草稿后点击一次，由你配置的 LLM 改写；再次点击即可恢复原文。右键或 `Alt + 点击` 打开设置。
+PromptSpark 在 **Cursor** Composer 输入框旁增加优化按钮与可配置快捷命令按钮。写好草稿后点击闪光按钮，由你配置的 LLM 改写；再次点击即可恢复原文。左侧文字按钮：**左键**填入当前快捷命令并发送，**右键**切换命令。右键或 `Alt + 点击` 闪光按钮打开设置。
 
 > 本仓库 **只支持 Cursor（Windows）**。  
 > Codex 桌面端请使用 [Codex++](https://github.com/xiaoyangtx996/CodexPlusPlus)（已内置 PromptSpark）。
@@ -24,7 +24,7 @@ PromptSpark 在 **Cursor** Composer 输入框旁增加一个优化按钮。写�
 ## 能做什么
 
 - **优化与还原**：点击优化当前提示词，再次点击恢复原文。
-- **继续发送**：优化按钮左侧的「继续」会写入「继续」并自动发送。
+- **快捷命令**：Composer 上显示当前命令标题（默认「继续」）；**左键**写入命令内容并自动发送，**右键**弹出菜单切换命令。设置里可新增/编辑/删除命令（例如内容填 `/navigate-software-development`）。
 - **随时取消**：请求进行中再次点击即可停止。
 - **多种风格**：内置简洁、结构化、编程三种风格，支持自定义增删。
 - **接口自选**：兼容 OpenAI 风格接口和 Anthropic API。
@@ -38,7 +38,7 @@ PromptSpark 在 **Cursor** Composer 输入框旁增加一个优化按钮。写�
 - Windows
 - [Node.js LTS](https://nodejs.org/)
 - Cursor
-- OpenAI 兼容或 Anthropic API
+- OpenAI 兼容或 Anthropic API（仅「优化」需要；快捷命令发送不依赖 API）
 
 ### 一键安装
 
@@ -56,14 +56,25 @@ irm https://wget.la/https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/
 
 安装器会请求 UAC 管理员权限，关闭 Cursor，写入外部脚本并更新 checksum，随后重新启动 Cursor。写入遇到占用时最多重试 3 次。
 
+**升级**：已安装过旧版时，再执行同一条安装命令即可覆盖到最新功能。
+
 安装后：
 
 1. 在 Cursor Composer 中输入提示词。
-2. 点击输入框右侧的闪光按钮开始优化。
-3. 再次点击恢复原文；优化过程中点击则取消请求。
-4. 右键或 `Alt + 点击` 按钮，完成首次配置。
+2. 点击闪光按钮优化；再次点击还原；优化过程中点击则取消。
+3. 点击闪光按钮左侧的快捷命令按钮（默认文案「继续」）→ 左键发送；右键切换命令。
+4. 右键或 `Alt + 点击` 闪光按钮打开设置（仅配置；命令选用在左侧文字按钮右键完成）。
+5. 首次使用优化前，请在「模型配置」中填写 API。
 
 ## 首次配置
+
+设置面板顶部三个长 Tab：
+
+| Tab | 内容 |
+|:---|:---|
+| 提示词优化 | 简洁 / 结构化 / 编程风格与 system prompt |
+| 快捷命令 | 下拉选择当前命令（菜单内新增/删除）；编辑标题（按钮文案）与内容（发送文本） |
+| 模型配置 | 协议、Base URL、API Key、Model |
 
 | 字段 | 填写内容 |
 |:---|:---|

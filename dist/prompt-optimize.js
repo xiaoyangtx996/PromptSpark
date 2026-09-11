@@ -2,12 +2,12 @@
 @prompt-spark-script
 name: PromptSpark
 description: Optimize the Cursor Composer prompt with an external LLM; click to optimize, click again to restore.
-version: 1.3.5
+version: 1.3.6
 author: PromptSpark
 */
 
 (() => {
-  const SCRIPT_VERSION = "1.3.5";
+  const SCRIPT_VERSION = "1.3.6";
   const API_KEY = "__codexPlusPromptOptimize";
   const MARKET_ID = "prompt-optimize";
   const BRIDGE_KEY = "__codexSessionDeleteBridge";
@@ -15,7 +15,9 @@ author: PromptSpark
   const STYLE_ID = "codex-plus-prompt-optimize-style";
   const BUTTON_ATTR = "data-codex-prompt-optimize";
   const CONTINUE_BUTTON_ATTR = "data-codex-prompt-continue";
+  const CONTINUE_MENU_ATTR = "data-codex-prompt-continue-menu";
   const CONTINUE_PROMPT_TEXT = "继续";
+  const DEFAULT_COMMAND_ID = "continue";
   const PANEL_ATTR = "data-codex-prompt-optimize-panel";
   const TOAST_ATTR = "data-codex-prompt-optimize-toast";
   const FLOAT_HOST_ATTR = "data-codex-prompt-optimize-float";
@@ -133,7 +135,52 @@ author: PromptSpark
       model: DEFAULT_MODELS.openai,
       style: "structured",
       styles: defaultStyleList(),
+      activeCommandId: DEFAULT_COMMAND_ID,
+      commands: defaultCommandList(),
     };
+  }
+
+  function defaultCommandList() {
+    return [{ id: DEFAULT_COMMAND_ID, title: CONTINUE_PROMPT_TEXT, content: CONTINUE_PROMPT_TEXT }];
+  }
+
+  function newCommandId() {
+    return `cmd_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  }
+
+  function normalizeCommands(list) {
+    const raw = Array.isArray(list) ? list : [];
+    const out = [];
+    const seen = new Set();
+    for (let i = 0; i < raw.length; i += 1) {
+      const item = raw[i];
+      if (!item || typeof item !== "object") continue;
+      let id = typeof item.id === "string" && item.id.trim() ? item.id.trim() : `cmd_${i}`;
+      if (seen.has(id)) id = `${id}_${i}`;
+      seen.add(id);
+      const title = typeof item.title === "string" && item.title.trim() ? item.title.trim() : CONTINUE_PROMPT_TEXT;
+      const content =
+        typeof item.content === "string" && item.content.trim()
+          ? item.content
+          : typeof item.title === "string" && item.title.trim()
+            ? item.title
+            : CONTINUE_PROMPT_TEXT;
+      out.push({ id, title, content });
+    }
+    if (!out.length) return defaultCommandList();
+    if (!out.some((c) => c.id === DEFAULT_COMMAND_ID)) {
+      out.unshift(...defaultCommandList());
+    }
+    return out;
+  }
+
+  function getActiveCommand(settings = loadSettings()) {
+    const commands = normalizeCommands(settings?.commands);
+    const id =
+      typeof settings?.activeCommandId === "string" && settings.activeCommandId.trim()
+        ? settings.activeCommandId.trim()
+        : DEFAULT_COMMAND_ID;
+    return commands.find((c) => c.id === id) || commands[0] || defaultCommandList()[0];
   }
 
   function loadSettings() {
@@ -174,6 +221,12 @@ author: PromptSpark
       }
       let style = typeof parsed.style === "string" && parsed.style.trim() ? parsed.style.trim() : "structured";
       if (!styles.some((s) => s.id === style)) style = "structured";
+      const commands = normalizeCommands(parsed.commands);
+      let activeCommandId =
+        typeof parsed.activeCommandId === "string" && parsed.activeCommandId.trim()
+          ? parsed.activeCommandId.trim()
+          : DEFAULT_COMMAND_ID;
+      if (!commands.some((c) => c.id === activeCommandId)) activeCommandId = commands[0].id;
       return {
         protocol,
         baseUrl: typeof parsed.baseUrl === "string" && parsed.baseUrl.trim() ? parsed.baseUrl.trim() : DEFAULT_BASE_URLS[protocol],
@@ -181,6 +234,8 @@ author: PromptSpark
         model: typeof parsed.model === "string" && parsed.model.trim() ? parsed.model.trim() : DEFAULT_MODELS[protocol],
         style,
         styles,
+        commands,
+        activeCommandId,
       };
     } catch (_) {
       return defaultSettings();
@@ -188,6 +243,12 @@ author: PromptSpark
   }
 
   function saveSettings(settings) {
+    const commands = normalizeCommands(settings?.commands);
+    let activeCommandId =
+      typeof settings?.activeCommandId === "string" && settings.activeCommandId.trim()
+        ? settings.activeCommandId.trim()
+        : DEFAULT_COMMAND_ID;
+    if (!commands.some((c) => c.id === activeCommandId)) activeCommandId = commands[0].id;
     const next = {
       protocol: settings?.protocol === "anthropic" ? "anthropic" : "openai",
       baseUrl: typeof settings?.baseUrl === "string" ? settings.baseUrl : "",
@@ -195,6 +256,8 @@ author: PromptSpark
       model: typeof settings?.model === "string" ? settings.model : "",
       style: typeof settings?.style === "string" ? settings.style : "structured",
       styles: Array.isArray(settings?.styles) ? settings.styles : defaultStyleList(),
+      commands,
+      activeCommandId,
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
     try {
@@ -670,32 +733,6 @@ author: PromptSpark
     return null;
   }
 
-  function findStructuralContextGroup(footer) {
-    if (!(footer instanceof Element)) return null;
-    const triggers = Array.from(footer.querySelectorAll("[data-codex-intelligence-trigger]"));
-    for (const trigger of triggers) {
-      if (isInSidebar(trigger)) continue;
-      let node = trigger.parentElement;
-      while (node && node !== footer) {
-        const className = classNameText(node);
-        if (className.includes("items-center") && (node.querySelector(".h-token-button-composer") || node.querySelector("[class*='h-token-button-composer']") || node.querySelector("button, [role='button']"))) {
-          const reasoningItem = directChildContaining(node, trigger);
-          const children = Array.from(node.children);
-          const modelItem =
-            children
-              .slice(0, Math.max(0, children.indexOf(reasoningItem)))
-              .reverse()
-              .find((child) => isModelControl(child) || scoreModelCandidate(child, footer.getBoundingClientRect()) > 28) || null;
-          if (modelItem && reasoningItem && !isInSidebar(modelItem) && !isFolderOrPathControl(modelItem)) {
-            return { group: node, modelItem, reasoningItem, strategy: "structural-reasoning" };
-          }
-        }
-        node = node.parentElement;
-      }
-    }
-    return null;
-  }
-
   function isInSidebar(node) {
     if (!(node instanceof Element)) return false;
     if (node.closest?.("[data-app-action-sidebar-thread-id], [data-app-action-sidebar-thread-active], [data-sidebar], aside, nav")) {
@@ -810,22 +847,6 @@ author: PromptSpark
     const ranked = candidates
       .map((el, index) => ({ el, index, score: scoreComposerRegion(el) }))
       .filter((row) => row.score >= 30)
-      .sort((a, b) => b.score - a.score || a.index - b.index);
-    return ranked[0]?.el || null;
-  }
-
-  function findBestModelControl(scope) {
-    const root = scope instanceof Element ? scope : document;
-    // Prefer action-row local search
-    if (root !== document) {
-      const inRow = findModelControlInRow(root);
-      if (inRow) return inRow;
-    }
-    const rowRect = root.getBoundingClientRect?.() || null;
-    const candidates = collectClickables(root);
-    const ranked = candidates
-      .map((el, index) => ({ el, index, score: scoreModelCandidate(el, rowRect) }))
-      .filter((row) => row.score >= 28)
       .sort((a, b) => b.score - a.score || a.index - b.index);
     return ranked[0]?.el || null;
   }
@@ -1490,11 +1511,6 @@ author: PromptSpark
         from { transform: rotate(0deg); }
         to { transform: rotate(360deg); }
       }
-      .cpo-channel-hint {
-        font-size: 12px;
-        line-height: 1.45;
-        opacity: .85;
-      }
 /* PromptSpark — injected after base styles */
 
 [${BUTTON_ATTR}] {
@@ -1545,6 +1561,54 @@ author: PromptSpark
   opacity: 0.55;
   cursor: progress;
   pointer-events: none;
+}
+
+[${CONTINUE_MENU_ATTR}] {
+  position: fixed !important;
+  z-index: 2147483002 !important;
+  min-width: 148px;
+  max-width: min(260px, calc(100vw - 16px));
+  max-height: min(320px, calc(100vh - 16px));
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 4px !important;
+  margin: 0 !important;
+  border-radius: 10px !important;
+  background: #ffffff !important;
+  color: #1d1d1f !important;
+  border: 0 !important;
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.08),
+    0 10px 28px rgba(0, 0, 0, 0.18) !important;
+  font: 13px/1.25 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  scrollbar-width: none;
+}
+[${CONTINUE_MENU_ATTR}]::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+[${CONTINUE_MENU_ATTR}] .cpo-cmd-menu-item {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #1d1d1f;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 7px;
+  font: inherit;
+  cursor: pointer;
+}
+[${CONTINUE_MENU_ATTR}] .cpo-cmd-menu-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+[${CONTINUE_MENU_ATTR}] .cpo-cmd-menu-item[aria-checked="true"] {
+  background: rgba(0, 113, 227, 0.12);
+  color: #0071e3;
+  font-weight: 560;
 }
 [${BUTTON_ATTR}]:hover {
   opacity: 1;
@@ -1634,8 +1698,11 @@ author: PromptSpark
 
 [${PANEL_ATTR}].cpo-apple .cpo-card {
   width: min(420px, calc(100vw - 32px)) !important;
-  max-height: min(88vh, 720px) !important;
-  overflow: visible !important;
+  height: 640px !important;
+  max-height: min(88vh, 640px) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
   background: #f5f5f7 !important;
   border: 1px solid rgba(0, 0, 0, 0.1) !important;
   border-radius: 16px !important;
@@ -1648,8 +1715,29 @@ author: PromptSpark
 
 [${PANEL_ATTR}].cpo-apple .cpo-sheet-head,
 [${PANEL_ATTR}].cpo-apple .cpo-block,
+[${PANEL_ATTR}].cpo-apple .cpo-sheet-foot,
+[${PANEL_ATTR}].cpo-apple .cpo-pane-host {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-sheet-head,
+[${PANEL_ATTR}].cpo-apple .cpo-block,
 [${PANEL_ATTR}].cpo-apple .cpo-sheet-foot {
-  padding: 14px 16px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-main-tabs {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  margin: 0 16px 8px;
+  padding: 3px !important;
+  border-radius: 9px;
+  background: rgba(118, 118, 128, 0.12);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.04);
 }
 
 [${PANEL_ATTR}].cpo-apple .cpo-sheet-head {
@@ -1657,7 +1745,103 @@ author: PromptSpark
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: none;
+  padding-bottom: 8px;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-main-tab {
+  flex: none;
+  appearance: none;
+  border: 0;
+  border-radius: 7px;
+  padding: 7px 4px;
+  font: 510 12px/1.15 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.01em;
+  color: rgba(60, 60, 67, 0.85);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-main-tab:hover {
+  color: #1d1d1f;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-main-tab:active {
+  transform: scale(0.98);
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-main-tab[aria-selected="true"] {
+  background: #ffffff;
+  color: #1d1d1f;
+  font-weight: 590;
+  box-shadow:
+    0 0.5px 0.5px rgba(0, 0, 0, 0.04),
+    0 1px 3px rgba(0, 0, 0, 0.08),
+    0 0 0 0.5px rgba(0, 0, 0, 0.04);
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-pane-host {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 0;
+  padding-bottom: 4px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-pane::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-pane[hidden] {
+  display: none !important;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-sheet-head,
+[${PANEL_ATTR}].cpo-apple .cpo-main-tabs,
+[${PANEL_ATTR}].cpo-apple .cpo-sheet-foot {
+  flex: 0 0 auto;
+}
+
+/* label + textarea：第一行固定标题，第二行吃掉剩余高度，避免标题与内容之间留白 */
+[${PANEL_ATTR}].cpo-apple .cpo-field.cpo-field-grow {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 4px;
+  align-content: stretch;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-field-grow > span {
+  align-self: start;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-field-grow textarea {
+  min-height: 0 !important;
+  max-height: none !important;
+  height: 100% !important;
+  align-self: stretch;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-btn-mini {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 999px;
 }
 
 [${PANEL_ATTR}].cpo-apple h2 {
@@ -1697,11 +1881,12 @@ author: PromptSpark
   gap: 10px;
 }
 
+/* Compact default style tabs — right of「风格」 */
 [${PANEL_ATTR}].cpo-apple .cpo-block-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
 }
 
 [${PANEL_ATTR}].cpo-apple .cpo-h3 {
@@ -1932,14 +2117,6 @@ author: PromptSpark
   background: rgba(0, 113, 227, 0.08);
 }
 
-/* Compact default style tabs — right of「风格」 */
-[${PANEL_ATTR}].cpo-apple .cpo-block-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
 [${PANEL_ATTR}].cpo-apple .cpo-segment {
   display: flex;
   align-items: stretch;
@@ -1983,7 +2160,9 @@ author: PromptSpark
 [${PANEL_ATTR}].cpo-apple .cpo-footnote {
   margin: 0;
   font-size: 11px;
+  line-height: 1.4;
   color: #86868b !important;
+  flex: 0 0 auto;
 }
 
 [${PANEL_ATTR}].cpo-apple .cpo-warn-banner {
@@ -2122,10 +2301,6 @@ author: PromptSpark
         color: #a1a1aa;
         font-size: 12px;
       }
-      [${PANEL_ATTR}] .cpo-grid {
-        display: grid;
-        gap: 10px;
-      }
       [${PANEL_ATTR}] label {
         display: grid;
         gap: 4px;
@@ -2150,18 +2325,6 @@ author: PromptSpark
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         font-size: 12px;
       }
-      [${PANEL_ATTR}] .cpo-row {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        align-items: center;
-      }
-      [${PANEL_ATTR}] .cpo-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 8px;
-        margin-top: 14px;
-      }
       [${PANEL_ATTR}] button {
         border-radius: 8px;
         border: 1px solid rgba(255,255,255,.14);
@@ -2170,37 +2333,6 @@ author: PromptSpark
         padding: 7px 12px;
         font: inherit;
         cursor: pointer;
-      }
-      [${PANEL_ATTR}] button.cpo-primary {
-        background: rgba(16,163,127,.25);
-        border-color: #10a37f;
-        color: #6ee7b7;
-      }
-      [${PANEL_ATTR}] button.cpo-linkish {
-        background: transparent;
-        border-color: transparent;
-        color: #93c5fd;
-        padding: 0 4px;
-      }
-      [${PANEL_ATTR}] .cpo-prompt-block {
-        border: 1px solid rgba(255,255,255,.08);
-        border-radius: 10px;
-        padding: 10px;
-        background: rgba(39,39,42,.45);
-      }
-      [${PANEL_ATTR}] .cpo-prompt-head {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 6px;
-        color: #a1a1aa;
-        font-size: 12px;
-      }
-      [${PANEL_ATTR}] .cpo-warn {
-        margin-top: 10px;
-        color: #fbbf24;
-        font-size: 11px;
-        line-height: 1.4;
       }
     `;
     document.documentElement.appendChild(style);
@@ -2344,11 +2476,27 @@ author: PromptSpark
     button.type = "button";
     button.setAttribute(CONTINUE_BUTTON_ATTR, "true");
     button.dataset.version = SCRIPT_VERSION;
-    button.textContent = CONTINUE_PROMPT_TEXT;
-    button.setAttribute("title", "填入「继续」并发送");
-    button.setAttribute("aria-label", "填入继续并发送");
+    refreshContinueButtonAppearance(button);
     button.addEventListener("click", onContinueButtonClick);
+    button.addEventListener("contextmenu", onContinueButtonContextMenu, true);
+    button.addEventListener(
+      "auxclick",
+      (event) => {
+        if (event.button === 2) onContinueButtonContextMenu(event);
+      },
+      true,
+    );
     return button;
+  }
+
+  function refreshContinueButtonAppearance(button = document.querySelector(`[${CONTINUE_BUTTON_ATTR}]`)) {
+    if (!(button instanceof HTMLElement)) return;
+    const cmd = getActiveCommand();
+    const title = (cmd?.title || CONTINUE_PROMPT_TEXT).trim() || CONTINUE_PROMPT_TEXT;
+    if (button.textContent !== title) button.textContent = title;
+    const tip = `左键发送「${title}」· 右键切换命令`;
+    if (button.getAttribute("title") !== tip) button.setAttribute("title", tip);
+    if (button.getAttribute("aria-label") !== tip) button.setAttribute("aria-label", tip);
   }
 
   function getOrCreateContinueButton() {
@@ -2370,6 +2518,7 @@ author: PromptSpark
   function placeContinueBeforeSparkle(sparkle) {
     if (!(sparkle instanceof HTMLElement) || !sparkle.isConnected) return null;
     const cont = getOrCreateContinueButton();
+    refreshContinueButtonAppearance(cont);
     const parent = sparkle.parentElement;
     if (!(parent instanceof HTMLElement)) return cont;
     try {
@@ -2551,8 +2700,9 @@ author: PromptSpark
       // Only as secondary pulse if plain Enter did not clear the draft shortly after.
       window.setTimeout(() => {
         try {
+          const expected = normalizeText(getActiveCommand()?.content || CONTINUE_PROMPT_TEXT);
           const still = normalizeText(readComposerText(findComposerInput() || input));
-          if (still === CONTINUE_PROMPT_TEXT || still.trim() === CONTINUE_PROMPT_TEXT) {
+          if (still === expected || still.trim() === expected.trim()) {
             const active = findComposerInput() || input;
             active.focus();
             active.dispatchEvent(new KeyboardEvent("keydown", withCtrl));
@@ -2595,12 +2745,19 @@ author: PromptSpark
     runtime.continueBusy = true;
     if (cont instanceof HTMLElement) cont.dataset.busy = "1";
     try {
+      const cmd = getActiveCommand();
+      const payload = normalizeText(cmd?.content || CONTINUE_PROMPT_TEXT);
+      const label = (cmd?.title || CONTINUE_PROMPT_TEXT).trim() || CONTINUE_PROMPT_TEXT;
+      if (!payload.trim()) {
+        showToast("当前快捷命令内容为空", "warn");
+        return;
+      }
       const input = findComposerInput();
       if (!(input instanceof HTMLElement)) {
         showToast("未找到对话输入框", "error");
         return;
       }
-      const writeResult = writeComposerText(CONTINUE_PROMPT_TEXT, input);
+      const writeResult = writeComposerText(payload, input);
       if (!writeResult.ok) {
         showToast("无法写入输入框", "error");
         return;
@@ -2608,17 +2765,17 @@ author: PromptSpark
       await afterEditorPaint();
       const active = findComposerInput() || input;
       const verified = normalizeText(readComposerText(active));
-      if (verified !== CONTINUE_PROMPT_TEXT && verified.trim() !== CONTINUE_PROMPT_TEXT) {
-        showToast("未能写入「继续」", "error");
+      if (verified !== payload && verified.trim() !== payload.trim()) {
+        showToast(`未能写入「${label}」`, "error");
         return;
       }
       runtime.lastWrittenText = verified;
       const sent = clickComposerSend(active);
       if (!sent.ok) {
         if (sent.reason === "generating") {
-          showToast("当前正在生成，请稍后再点「继续」", "warn");
+          showToast(`当前正在生成，请稍后再点「${label}」`, "warn");
         } else {
-          showToast("已写入「继续」，但未找到发送按钮", "warn");
+          showToast(`已写入「${label}」，但未找到发送按钮`, "warn");
         }
       }
     } finally {
@@ -2630,7 +2787,95 @@ author: PromptSpark
   function onContinueButtonClick(event) {
     event.preventDefault();
     event.stopPropagation();
+    closeContinueCommandMenu();
     runContinueAndSend();
+  }
+
+  function onContinueButtonContextMenu(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    openContinueCommandMenu(event);
+  }
+
+  function closeContinueCommandMenu() {
+    document.querySelectorAll(`[${CONTINUE_MENU_ATTR}]`).forEach((node) => node.remove());
+    if (runtime.continueMenuCloser) {
+      document.removeEventListener("mousedown", runtime.continueMenuCloser, true);
+      runtime.continueMenuCloser = null;
+    }
+    if (runtime.continueMenuKey) {
+      document.removeEventListener("keydown", runtime.continueMenuKey, true);
+      runtime.continueMenuKey = null;
+    }
+  }
+
+  function setActiveCommandId(id) {
+    const settings = loadSettings();
+    const commands = normalizeCommands(settings.commands);
+    const nextId = String(id || "").trim();
+    if (!nextId || !commands.some((c) => c.id === nextId)) return false;
+    saveSettings({ ...settings, activeCommandId: nextId });
+    refreshContinueButtonAppearance();
+    return true;
+  }
+
+  function openContinueCommandMenu(event) {
+    closeContinueCommandMenu();
+    const settings = loadSettings();
+    const commands = normalizeCommands(settings.commands);
+    const active = getActiveCommand(settings);
+    const menu = document.createElement("div");
+    menu.setAttribute(CONTINUE_MENU_ATTR, "true");
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", "选择快捷命令");
+
+    for (const cmd of commands) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "cpo-cmd-menu-item";
+      item.setAttribute("role", "menuitemradio");
+      item.setAttribute("aria-checked", cmd.id === active?.id ? "true" : "false");
+      item.textContent = (cmd.title || "未命名").trim() || "未命名";
+      item.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setActiveCommandId(cmd.id);
+        closeContinueCommandMenu();
+      });
+      menu.appendChild(item);
+    }
+
+    document.documentElement.appendChild(menu);
+
+    const anchor = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.querySelector(`[${CONTINUE_BUTTON_ATTR}]`);
+    const rect = anchor instanceof HTMLElement ? anchor.getBoundingClientRect() : null;
+    const mw = menu.offsetWidth || 160;
+    const mh = menu.offsetHeight || 40;
+    let left = rect ? rect.left : Number(event?.clientX) || 12;
+    let top = rect ? rect.bottom + 6 : Number(event?.clientY) || 12;
+    if (left + mw > window.innerWidth - 8) left = Math.max(8, window.innerWidth - mw - 8);
+    if (top + mh > window.innerHeight - 8) top = Math.max(8, (rect ? rect.top : top) - mh - 6);
+    menu.style.left = `${Math.round(left)}px`;
+    menu.style.top = `${Math.round(top)}px`;
+
+    runtime.continueMenuCloser = (e) => {
+      const t = e.target;
+      if (t instanceof Element && (t.closest(`[${CONTINUE_MENU_ATTR}]`) || t.closest(`[${CONTINUE_BUTTON_ATTR}]`))) {
+        return;
+      }
+      closeContinueCommandMenu();
+    };
+    runtime.continueMenuKey = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeContinueCommandMenu();
+      }
+    };
+    window.setTimeout(() => {
+      document.addEventListener("mousedown", runtime.continueMenuCloser, true);
+      document.addEventListener("keydown", runtime.continueMenuKey, true);
+    }, 0);
   }
 
   function placementLooksValid(found) {
@@ -2917,117 +3162,6 @@ author: PromptSpark
   function ensureSparkleButton() {
     if (typeof refreshHost === "function") refreshHost();
     ensureWorkbenchSparkleButton();
-    return;
-
-    if (runtime.disposed) return;
-    let button = document.querySelector(`[${BUTTON_ATTR}]`);
-    if (
-      button instanceof HTMLElement &&
-      button.dataset.version === SCRIPT_VERSION &&
-      button.dataset.placement !== "float" &&
-      isVisible(button) &&
-      !isInSidebar(button)
-    ) {
-      const next = button.nextElementSibling;
-      if (
-        next &&
-        !isFolderOrPathControl(next) &&
-        !isPlusOrAccessControl(next) &&
-        !isSendControl(next) &&
-        (isModelControl(next) || looksLikeModelLabel(elementLabel(next)) || next.getAttribute?.("aria-haspopup") === "menu")
-      ) {
-        refreshButtonAppearance(button);
-        placeContinueBeforeSparkle(button);
-        bindComposerInputWatch();
-        return;
-      }
-    }
-    const found = findInlineContextGroup();
-    button = document.querySelector(`[${BUTTON_ATTR}]`);
-    const valid = placementLooksValid(found);
-
-    if (!valid) {
-      // Keep any previous good inline placement if still connected next to a model-ish control.
-      if (button instanceof HTMLElement && button.isConnected && button.dataset.placement && button.dataset.placement !== "float") {
-        const next = button.nextElementSibling;
-        if (next && (isModelControl(next) || looksLikeModelLabel(elementLabel(next)) || next.getAttribute?.("aria-haspopup") === "menu")) {
-          refreshButtonAppearance(button);
-          placeContinueBeforeSparkle(button);
-          bindComposerInputWatch();
-          return;
-        }
-      }
-      const host = ensureFloatingHost();
-      if (!(button instanceof HTMLElement) || button.dataset.version !== SCRIPT_VERSION) {
-        button?.remove();
-        button = createButton();
-      }
-      button.dataset.placement = "float";
-      if (button.parentElement !== host) host.appendChild(button);
-      document.querySelectorAll(`[${BUTTON_ATTR}]`).forEach((node) => {
-        if (node !== button) node.remove();
-      });
-      refreshButtonAppearance(button);
-      placeContinueBeforeSparkle(button);
-      bindComposerInputWatch();
-      debugLog("placement=float", {
-        actionRow: !!findComposerActionRow(),
-        surface: !!findComposerSurface(),
-        input: !!findProseMirrorInput(),
-      });
-      return;
-    }
-
-    removeFloatingHostIfEmpty();
-    const { group, modelItem, strategy, send } = found;
-    button = document.querySelector(`[${BUTTON_ATTR}]`) || button;
-    document.querySelectorAll(`[${BUTTON_ATTR}]`).forEach((node) => {
-      if (node !== button) node.remove();
-    });
-
-    if (!(button instanceof HTMLElement) || button.dataset.version !== SCRIPT_VERSION) {
-      button?.remove();
-      button = createButton();
-    }
-    button.dataset.placement = strategy || "inline";
-
-    // Order must be: ✨, model, send
-    if (send && (modelItem === send || modelItem.contains?.(send))) {
-      debugLog("refuse insert: modelItem is send");
-      return;
-    }
-
-    try {
-      if (button.parentElement !== group || button.nextSibling !== modelItem) {
-        group.insertBefore(button, modelItem);
-      }
-    } catch (_) {
-      try {
-        modelItem.before?.(button);
-      } catch (__) {
-        if (modelItem.parentElement) modelItem.parentElement.insertBefore(button, modelItem);
-      }
-    }
-
-    // Soft post-check: if we are clearly to the right of model, move before model again via parent.
-    try {
-      const bRect = button.getBoundingClientRect();
-      const mRect = modelItem.getBoundingClientRect();
-      if (bRect.left >= mRect.left - 1 && button.parentElement) {
-        button.parentElement.insertBefore(button, modelItem);
-      }
-    } catch (_) {
-      /* ignore */
-    }
-
-    refreshButtonAppearance(button);
-    placeContinueBeforeSparkle(button);
-    bindComposerInputWatch();
-    debugLog("placement=inline", {
-      strategy: strategy || "unknown",
-      modelLabel: elementLabel(modelItem).slice(0, 60),
-      sendLabel: send ? elementLabel(send).slice(0, 40) : "",
-    });
   }
 
   function bindComposerInputWatch() {
@@ -3646,17 +3780,23 @@ author: PromptSpark
 
   function closeSettingsPanel() {
     document.querySelectorAll(`[${PANEL_ATTR}]`).forEach((node) => node.remove());
+    closeContinueCommandMenu();
   }
 
   /**
  * Apple-style settings sheet (Trusted Types safe).
- * Frosted material, segmented defaults, custom style dropdown, no visible scrollbars.
+ * Top tabs: 提示词优化 · 快捷命令 · 模型配置
  */
 
   const LOCKED_STYLE_IDS = ["concise", "structured", "coding"];
   const PROTOCOL_OPTIONS = [
     { value: "openai", label: "OpenAI 兼容" },
     { value: "anthropic", label: "Anthropic" },
+  ];
+  const SETTINGS_TABS = [
+    { id: "styles", label: "提示词优化" },
+    { id: "commands", label: "快捷命令" },
+    { id: "model", label: "模型配置" },
   ];
 
   function cpoEl(tag, attrs, children) {
@@ -3739,13 +3879,21 @@ author: PromptSpark
     return merged;
   }
 
+  function cloneCommands(commands) {
+    return normalizeCommands(commands).map((c) => ({ ...c }));
+  }
+
   function openSettingsPanelDomSafe() {
     closeSettingsPanel();
     const settings = loadSettings();
     let draftStyles = cloneStyles(settings.styles);
     let activeId = settings.style;
     if (!draftStyles.some((s) => s.id === activeId)) activeId = "structured";
+    let draftCommands = cloneCommands(settings.commands);
+    let activeCommandId = settings.activeCommandId || DEFAULT_COMMAND_ID;
+    if (!draftCommands.some((c) => c.id === activeCommandId)) activeCommandId = draftCommands[0].id;
     let protocolValue = settings.protocol === "anthropic" ? "anthropic" : "openai";
+    let mainTab = "styles";
 
     const overlay = cpoEl("div", { [PANEL_ATTR]: "true", className: "cpo-apple" });
 
@@ -3802,7 +3950,40 @@ author: PromptSpark
     });
     const styleLockHint = cpoEl("div", { className: "cpo-lock-hint" });
 
-    // Protocol custom dropdown
+    const commandDd = cpoEl("div", { className: "cpo-dd cpo-command-dd" });
+    const commandDdTrigger = cpoEl("button", {
+      type: "button",
+      className: "cpo-dd-trigger",
+      "aria-haspopup": "listbox",
+      "aria-expanded": "false",
+    });
+    const commandDdValue = cpoEl("span", { className: "cpo-dd-value", text: "选择命令" });
+    commandDdTrigger.appendChild(commandDdValue);
+    commandDdTrigger.appendChild(cpoCaret());
+    const commandDdMenu = cpoEl("div", {
+      className: "cpo-dd-menu",
+      role: "listbox",
+      "aria-label": "快捷命令",
+      hidden: "true",
+    });
+    commandDd.appendChild(commandDdTrigger);
+    commandDd.appendChild(commandDdMenu);
+    const commandTitleEl = cpoEl("input", {
+      "data-cpo": "commandTitle",
+      type: "text",
+      spellcheck: "false",
+      placeholder: "例如：继续",
+    });
+    const commandContentEl = cpoEl("textarea", {
+      "data-cpo": "commandContent",
+      placeholder: "例如：继续 或 /navigate-software-development",
+      rows: "5",
+    });
+    const commandHintEl = cpoEl("div", {
+      className: "cpo-lock-hint",
+      text: "标题显示在 Composer 按钮上；内容为点击后填入并自动发送的文本。下拉可切换、新增或删除。",
+    });
+
     const protocolDd = cpoEl("div", { className: "cpo-dd", "data-cpo": "protocol" });
     const protocolTrigger = cpoEl("button", {
       type: "button",
@@ -3821,8 +4002,27 @@ author: PromptSpark
     protocolDd.appendChild(protocolTrigger);
     protocolDd.appendChild(protocolMenu);
 
+    const mainTabBar = cpoEl("div", { className: "cpo-main-tabs", role: "tablist", "aria-label": "设置分区" });
+    const paneStyles = cpoEl("section", {
+      className: "cpo-pane",
+      "data-pane": "styles",
+      role: "tabpanel",
+    });
+    const paneCommands = cpoEl("section", {
+      className: "cpo-pane",
+      "data-pane": "commands",
+      role: "tabpanel",
+      hidden: "true",
+    });
+    const paneModel = cpoEl("section", {
+      className: "cpo-pane",
+      "data-pane": "model",
+      role: "tabpanel",
+      hidden: "true",
+    });
+
     function closeAllMenus(except) {
-      for (const dd of [protocolDd, styleDd]) {
+      for (const dd of [protocolDd, styleDd, commandDd]) {
         if (except && dd === except) continue;
         const menu = dd.querySelector(".cpo-dd-menu");
         const trigger = dd.querySelector(".cpo-dd-trigger");
@@ -3909,6 +4109,13 @@ author: PromptSpark
         : DEFAULT_SYSTEM_PROMPTS[cur.id] || DEFAULT_SYSTEM_PROMPTS.structured;
     }
 
+    function commitCommandEditor() {
+      const cur = draftCommands.find((c) => c.id === activeCommandId);
+      if (!cur) return;
+      cur.title = commandTitleEl.value.trim() || cur.title || CONTINUE_PROMPT_TEXT;
+      cur.content = commandContentEl.value.trim() || cur.content || cur.title;
+    }
+
     function paintEditor() {
       const cur = ensureStylePrompt(draftStyles.find((s) => s.id === activeId));
       if (!cur) return;
@@ -3944,6 +4151,19 @@ author: PromptSpark
       });
     }
 
+    function paintCommandEditor() {
+      const cur = draftCommands.find((c) => c.id === activeCommandId) || draftCommands[0];
+      if (!cur) return;
+      activeCommandId = cur.id;
+      commandTitleEl.value = cur.title || "";
+      commandContentEl.value = cur.content || "";
+      commandDdValue.textContent = cur.title || "未命名";
+      commandDd.classList.add("has-value");
+      commandDdMenu.querySelectorAll("[data-command-id]").forEach((row) => {
+        row.setAttribute("aria-selected", row.getAttribute("data-command-id") === activeCommandId ? "true" : "false");
+      });
+    }
+
     function addCustomStyle() {
       commitCurrent();
       const id = newStyleId();
@@ -3967,6 +4187,31 @@ author: PromptSpark
       draftStyles = draftStyles.filter((s) => s.id !== id);
       if (activeId === id) activeId = "structured";
       rebuildStyleUi();
+    }
+
+    function addCommand() {
+      commitCommandEditor();
+      const id = typeof newCommandId === "function" ? newCommandId() : `cmd_${Date.now().toString(36)}`;
+      const n = draftCommands.length + 1;
+      draftCommands.push({
+        id,
+        title: `命令 ${n}`,
+        content: "/navigate-software-development",
+      });
+      activeCommandId = id;
+      rebuildCommandUi();
+      closeAllMenus();
+    }
+
+    function removeCommand(id) {
+      if (draftCommands.length <= 1) {
+        showToast("至少保留一条快捷命令", "warn");
+        return;
+      }
+      commitCommandEditor();
+      draftCommands = draftCommands.filter((c) => c.id !== id);
+      if (activeCommandId === id) activeCommandId = draftCommands[0].id;
+      rebuildCommandUi();
     }
 
     function rebuildDefaultTabs() {
@@ -4047,6 +4292,125 @@ author: PromptSpark
       paintEditor();
     }
 
+    function rebuildCommandMenu() {
+      commandDdMenu.textContent = "";
+      for (const cmd of draftCommands) {
+        const row = cpoEl("div", {
+          className: "cpo-dd-row",
+          "data-command-id": cmd.id,
+          role: "option",
+          "aria-selected": "false",
+        });
+        const pick = cpoEl("button", {
+          type: "button",
+          className: "cpo-dd-item",
+          text: cmd.title || "未命名",
+        });
+        pick.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          commitCommandEditor();
+          activeCommandId = cmd.id;
+          paintCommandEditor();
+          closeAllMenus();
+        });
+        const xBtn = cpoEl("button", {
+          type: "button",
+          className: "cpo-dd-x",
+          title: "删除此命令",
+          "aria-label": `删除 ${cmd.title || "命令"}`,
+          text: "×",
+        });
+        xBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          removeCommand(cmd.id);
+        });
+        row.appendChild(pick);
+        row.appendChild(xBtn);
+        commandDdMenu.appendChild(row);
+      }
+      const addBtn = cpoEl("button", {
+        type: "button",
+        className: "cpo-dd-add",
+        text: "＋ 新增命令",
+      });
+      addBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        addCommand();
+      });
+      commandDdMenu.appendChild(addBtn);
+    }
+
+    function rebuildCommandUi() {
+      rebuildCommandMenu();
+      paintCommandEditor();
+    }
+
+    function setMainTab(next) {
+      const id = SETTINGS_TABS.some((t) => t.id === next) ? next : "styles";
+      if (mainTab === "styles" && id !== "styles") commitCurrent();
+      if (mainTab === "commands" && id !== "commands") commitCommandEditor();
+      mainTab = id;
+      mainTabBar.querySelectorAll("[data-main-tab]").forEach((btn) => {
+        btn.setAttribute("aria-selected", btn.getAttribute("data-main-tab") === id ? "true" : "false");
+      });
+      paneStyles.hidden = id !== "styles";
+      paneCommands.hidden = id !== "commands";
+      paneModel.hidden = id !== "model";
+      closeAllMenus();
+    }
+
+    for (const tab of SETTINGS_TABS) {
+      const btn = cpoEl("button", {
+        type: "button",
+        className: "cpo-main-tab",
+        "data-main-tab": tab.id,
+        role: "tab",
+        text: tab.label,
+        "aria-selected": tab.id === "styles" ? "true" : "false",
+      });
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        setMainTab(tab.id);
+      });
+      mainTabBar.appendChild(btn);
+    }
+
+    paneStyles.append(
+      cpoEl("div", { className: "cpo-block-head" }, [
+        cpoEl("h3", { className: "cpo-h3", text: "风格" }),
+        segment,
+      ]),
+      cpoEl("label", { className: "cpo-field" }, [cpoEl("span", { text: "自定义" }), styleDd]),
+      styleLockHint,
+      cpoEl("label", { className: "cpo-field" }, [cpoEl("span", { text: "名称" }), styleNameEl]),
+      cpoEl("label", { className: "cpo-field cpo-field-grow" }, [cpoEl("span", { text: "System prompt" }), stylePromptEl]),
+    );
+
+    paneCommands.append(
+      cpoEl("label", { className: "cpo-field" }, [cpoEl("span", { text: "当前命令" }), commandDd]),
+      commandHintEl,
+      cpoEl("label", { className: "cpo-field" }, [cpoEl("span", { text: "标题" }), commandTitleEl]),
+      cpoEl("label", { className: "cpo-field cpo-field-grow" }, [cpoEl("span", { text: "内容" }), commandContentEl]),
+    );
+
+    paneModel.append(
+      cpoEl("h3", { className: "cpo-h3", text: "接口" }),
+      cpoEl("div", { className: "cpo-fields" }, [
+        cpoEl("label", { className: "cpo-field cpo-span2" }, [cpoEl("span", { text: "协议" }), protocolDd]),
+        cpoEl("label", { className: "cpo-field cpo-span2" }, [cpoEl("span", { text: "Base URL" }), baseUrlEl]),
+        cpoEl("label", { className: "cpo-field" }, [cpoEl("span", { text: "API Key" }), apiKeyEl]),
+        cpoEl("label", { className: "cpo-field" }, [cpoEl("span", { text: "Model" }), modelEl]),
+      ]),
+      warnEl,
+      cpoEl("p", {
+        className: "cpo-footnote",
+        text: `通道 ${typeof HOST === "string" ? HOST : "auto"} · 本地代理随宿主启动 · 127.0.0.1:37841`,
+      }),
+    );
+
     rebuildProtocolMenu();
     setProtocol(protocolValue);
     baseUrlEl.value = settings.baseUrl || "";
@@ -4056,6 +4420,8 @@ author: PromptSpark
     baseUrlEl.addEventListener("input", updateMismatchWarn);
     updateMismatchWarn();
     rebuildStyleUi();
+    rebuildCommandUi();
+    setMainTab("styles");
 
     protocolTrigger.addEventListener("click", (e) => {
       e.preventDefault();
@@ -4067,42 +4433,25 @@ author: PromptSpark
       e.stopPropagation();
       toggleMenu(styleDd);
     });
+    commandDdTrigger.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleMenu(commandDd);
+    });
+    commandTitleEl.addEventListener("input", () => {
+      commandDdValue.textContent = commandTitleEl.value.trim() || "未命名";
+    });
 
     const card = cpoEl("div", { className: "cpo-card", role: "dialog", "aria-modal": "true", "aria-label": "PromptSpark" }, [
       cpoEl("header", { className: "cpo-sheet-head" }, [
         cpoEl("div", null, [
           cpoEl("h2", { text: "PromptSpark" }),
-          cpoEl("p", { className: "cpo-sub", text: "优化 · 还原 · Alt+点击打开设置" }),
+          cpoEl("p", { className: "cpo-sub", text: "优化 · 快捷命令 · Alt+点击打开设置" }),
         ]),
         cpoEl("button", { type: "button", className: "cpo-close", "data-cpo-action": "close", text: "关闭" }),
       ]),
-      cpoEl("section", { className: "cpo-block" }, [
-        cpoEl("h3", { className: "cpo-h3", text: "接口" }),
-        cpoEl("div", { className: "cpo-fields" }, [
-          cpoEl("label", { className: "cpo-field cpo-span2" }, [cpoEl("span", { text: "协议" }), protocolDd]),
-          cpoEl("label", { className: "cpo-field cpo-span2" }, [cpoEl("span", { text: "Base URL" }), baseUrlEl]),
-          cpoEl("label", { className: "cpo-field" }, [cpoEl("span", { text: "API Key" }), apiKeyEl]),
-          cpoEl("label", { className: "cpo-field" }, [cpoEl("span", { text: "Model" }), modelEl]),
-        ]),
-        warnEl,
-        cpoEl("p", {
-          className: "cpo-footnote",
-          text: `通道 ${typeof HOST === "string" ? HOST : "auto"} · 本地代理随宿主启动 · 127.0.0.1:37841`,
-        }),
-      ]),
-      cpoEl("section", { className: "cpo-block" }, [
-        cpoEl("div", { className: "cpo-block-head" }, [
-          cpoEl("h3", { className: "cpo-h3", text: "风格" }),
-          segment,
-        ]),
-        cpoEl("label", { className: "cpo-field" }, [
-          cpoEl("span", { text: "自定义" }),
-          styleDd,
-        ]),
-        styleLockHint,
-        cpoEl("label", { className: "cpo-field" }, [cpoEl("span", { text: "名称" }), styleNameEl]),
-        cpoEl("label", { className: "cpo-field" }, [cpoEl("span", { text: "System prompt" }), stylePromptEl]),
-      ]),
+      mainTabBar,
+      cpoEl("div", { className: "cpo-pane-host" }, [paneStyles, paneCommands, paneModel]),
       cpoEl("footer", { className: "cpo-sheet-foot" }, [
         cpoEl("button", { type: "button", className: "cpo-btn", "data-cpo-action": "close", text: "取消" }),
         cpoEl("button", { type: "button", className: "cpo-btn cpo-btn-fill", "data-cpo-action": "save", text: "存储" }),
@@ -4128,6 +4477,7 @@ author: PromptSpark
     overlay.querySelector('[data-cpo-action="save"]').addEventListener("click", (event) => {
       event.preventDefault();
       commitCurrent();
+      commitCommandEditor();
       let protocol = protocolValue === "anthropic" ? "anthropic" : "openai";
       const model = modelEl.value.trim() || DEFAULT_MODELS[protocol];
       if (protocol === "anthropic" && /^(gpt|o[1-9]|chatgpt|deepseek|qwen)/i.test(model)) {
@@ -4144,11 +4494,14 @@ author: PromptSpark
         baseUrl = normalizeBaseUrl(raw);
       } catch (error) {
         showToast(error?.message || "Base URL 无效", "error");
+        setMainTab("model");
         baseUrlEl.focus();
         return;
       }
       draftStyles = cloneStyles(draftStyles);
       if (!draftStyles.some((s) => s.id === activeId)) activeId = "structured";
+      draftCommands = cloneCommands(draftCommands);
+      if (!draftCommands.some((c) => c.id === activeCommandId)) activeCommandId = draftCommands[0].id;
       saveSettings({
         protocol,
         baseUrl,
@@ -4156,14 +4509,24 @@ author: PromptSpark
         model,
         style: activeId,
         styles: draftStyles.map((s) => ensureStylePrompt(s)),
+        commands: draftCommands,
+        activeCommandId,
       });
+      try {
+        refreshContinueButtonAppearance();
+      } catch (_) {
+        /* ignore */
+      }
       closeSettingsPanel();
       showToast("已存储", "ok");
     });
     overlay.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        const anyOpen = protocolDd.classList.contains("is-open") || styleDd.classList.contains("is-open");
+        const anyOpen =
+          protocolDd.classList.contains("is-open") ||
+          styleDd.classList.contains("is-open") ||
+          commandDd.classList.contains("is-open");
         if (anyOpen) {
           closeAllMenus();
           return;
@@ -4173,7 +4536,7 @@ author: PromptSpark
     });
 
     document.documentElement.appendChild(overlay);
-    apiKeyEl.focus();
+    stylePromptEl.focus();
   }
 
 
@@ -4245,7 +4608,8 @@ author: PromptSpark
     }
     runtime.inputListeners.clear();
     closeSettingsPanel();
-    document.querySelectorAll(`[${BUTTON_ATTR}], [${CONTINUE_BUTTON_ATTR}], [${TOAST_ATTR}], [${PANEL_ATTR}], [${FLOAT_HOST_ATTR}]`).forEach((node) => node.remove());
+    closeContinueCommandMenu();
+    document.querySelectorAll(`[${BUTTON_ATTR}], [${CONTINUE_BUTTON_ATTR}], [${CONTINUE_MENU_ATTR}], [${TOAST_ATTR}], [${PANEL_ATTR}], [${FLOAT_HOST_ATTR}]`).forEach((node) => node.remove());
     runtime.button = null;
     runtime.continueButton = null;
     document.getElementById(STYLE_ID)?.remove();

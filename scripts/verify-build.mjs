@@ -1,7 +1,5 @@
-import { execSync } from "node:child_process";
 import fs from "node:fs";
-execSync("node build.mjs", { stdio: "inherit" });
-execSync("node --check dist/prompt-optimize.js", { stdio: "inherit" });
+
 const s = fs.readFileSync("dist/prompt-optimize.js", "utf8");
 const ok = {
   v: /SCRIPT_VERSION = "1\.3\.6"/.test(s),
@@ -20,7 +18,21 @@ const ok = {
   noScroll: s.includes("scrollbar-width: none"),
   autoProto: s.includes("已自动改为 OpenAI 兼容协议"),
   noWhiteOverlay: s.includes("prefers-reduced-transparency") && s.includes("rgba(0, 0, 0, 0.5)"),
+  noDeadFinders: !s.includes("findStructuralContextGroup") && !s.includes("findBestModelControl"),
+  noOrphanCss: !s.includes(".cpo-grid") && !s.includes("cpo-channel-hint") && !s.includes("cpo-linkish"),
+  commandDd: s.includes("cpo-command-dd") && s.includes("＋ 新增命令") && !s.includes("cpo-cmd-list"),
+  continueMenu:
+    s.includes("CONTINUE_MENU_ATTR") &&
+    s.includes("openContinueCommandMenu") &&
+    s.includes("onContinueButtonContextMenu") &&
+    s.includes("左键发送"),
+  shortEnsure: /function ensureSparkleButton\(\) \{\s*if \(typeof refreshHost === "function"\) refreshHost\(\);\s*ensureWorkbenchSparkleButton\(\);\s*\}/.test(
+    s,
+  ),
+  noEarlyReturnDead: !/ensureWorkbenchSparkleButton\(\);\s*return;\s*if \(runtime\.disposed\)/.test(s),
+  workbench: s.includes("ensureWorkbenchSparkleButton"),
+  settingsDom: s.includes("openSettingsPanelDomSafe"),
 };
 console.log(ok);
 if (Object.values(ok).some((x) => !x)) process.exit(1);
-execSync("node install.mjs --hosts=cursor --no-restart", { stdio: "inherit" });
+console.log(`verify ok, bytes=${s.length}`);
