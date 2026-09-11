@@ -11,7 +11,7 @@ const sourcePath = path.join(root, "src", "prompt-optimize.codex-source.js");
 const adaptersPath = path.join(root, "src", "host-adapters.js");
 const settingsDomPath = path.join(root, "src", "settings-dom.js");
 const outPath = path.join(root, "dist", "prompt-optimize.js");
-const VERSION = "1.3.3";
+const VERSION = "1.3.5";
 
 let src = fs.readFileSync(sourcePath, "utf8");
 let adapters = fs.readFileSync(adaptersPath, "utf8");
@@ -1007,6 +1007,9 @@ const checks = [
   ["no const HOST detect", !/const\s+HOST\s*=\s*detectHost/.test(src)],
   ["workbench ensure", src.includes("ensureWorkbenchSparkleButton")],
   ["alt settings", src.includes("event.altKey")],
+  ["continue button", src.includes("CONTINUE_BUTTON_ATTR") && src.includes("runContinueAndSend")],
+  ["continue left of sparkle", src.includes("placeContinueBeforeSparkle")],
+  ["composer send scoped", src.includes("findCursorComposerSendButton") && src.includes("isNotificationControl")],
 ];
 for (const [name, ok] of checks) {
   if (!ok) throw new Error(`Build check failed: ${name}`);

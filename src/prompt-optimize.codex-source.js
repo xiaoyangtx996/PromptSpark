@@ -14,6 +14,8 @@ author: Codex++ Community
   const BRIDGE_PATH = "/llm-proxy";
   const STYLE_ID = "codex-plus-prompt-optimize-style";
   const BUTTON_ATTR = "data-codex-prompt-optimize";
+  const CONTINUE_BUTTON_ATTR = "data-codex-prompt-continue";
+  const CONTINUE_PROMPT_TEXT = "继续";
   const PANEL_ATTR = "data-codex-prompt-optimize-panel";
   const TOAST_ATTR = "data-codex-prompt-optimize-toast";
   const FLOAT_HOST_ATTR = "data-codex-prompt-optimize-float";
@@ -104,6 +106,9 @@ author: Codex++ Community
     bridgePathUnsupported: false,
     lastWrittenText: null,
     writeToken: 0,
+    button: null,
+    continueButton: null,
+    continueBusy: false,
   };
 
   /** @type {Record<string, {originalText: string|null, optimizedText: string|null, mode: "idle"|"optimized"}>} */
@@ -303,7 +308,8 @@ author: Codex++ Community
 
   function isSendControl(node) {
     if (!(node instanceof Element) || !isVisible(node) || isInSidebar(node)) return false;
-    if (node.closest?.(`[${BUTTON_ATTR}], [${PANEL_ATTR}]`)) return false;
+    if (node.closest?.(`[${BUTTON_ATTR}], [${CONTINUE_BUTTON_ATTR}], [${PANEL_ATTR}]`)) return false;
+    if (node.matches?.(`[${CONTINUE_BUTTON_ATTR}]`)) return false;
     if (isPlusOrAccessControl(node) || isFolderOrPathControl(node)) return false;
     const label = collapseWs(elementLabel(node));
     const aria = `${node.getAttribute("aria-label") || ""} ${node.getAttribute("title") || ""}`;
@@ -334,7 +340,7 @@ author: Codex++ Community
   function isModelControl(node) {
     if (!(node instanceof Element)) return false;
     if (isInSidebar(node)) return false;
-    if (node.closest?.(`[${BUTTON_ATTR}]`)) return false;
+    if (node.closest?.(`[${BUTTON_ATTR}], [${CONTINUE_BUTTON_ATTR}]`)) return false;
     if (node.matches?.(`[${BUTTON_ATTR}]`) || node.querySelector?.(`[${BUTTON_ATTR}]`)) return false;
     if (isReasoningControl(node)) return false;
     if (isSendControl(node) || isPlusOrAccessControl(node) || isFolderOrPathControl(node)) return false;
@@ -405,7 +411,13 @@ author: Codex++ Community
       root.querySelectorAll(
         "button, [role='button'], [aria-haspopup='menu'], [type='submit'], .h-token-button-composer, [class*='h-token-button-composer'], [class*='size-token-button-composer']",
       ),
-    ).filter((el) => el instanceof HTMLElement && isVisible(el) && !isInSidebar(el) && !el.closest?.(`[${BUTTON_ATTR}], [${PANEL_ATTR}]`));
+    ).filter(
+      (el) =>
+        el instanceof HTMLElement &&
+        isVisible(el) &&
+        !isInSidebar(el) &&
+        !el.closest?.(`[${BUTTON_ATTR}], [${CONTINUE_BUTTON_ATTR}], [${PANEL_ATTR}]`),
+    );
   }
 
   function findSendButton(scope) {
@@ -434,6 +446,7 @@ author: Codex++ Community
         if (looksLikeModelLabel(label) || MODEL_NAME_RE.test(label)) score -= 100;
         if (el.getAttribute("aria-haspopup") === "menu") score -= 40;
         if (isPlusOrAccessControl(el) || isFolderOrPathControl(el)) score -= 100;
+        if (typeof isNotificationControl === "function" && isNotificationControl(el)) score -= 200;
         if (isComposerTokenButton(el) && !/send|stop|提交|发送|停止/i.test(aria + label)) score -= 30;
         // Prefer rightmost among ties.
         score += Math.min(20, Math.max(0, rect.left / Math.max(1, window.innerWidth)) * 20);
@@ -1290,6 +1303,36 @@ author: Codex++ Community
         transition: background .15s ease, border-color .15s ease, color .15s ease, opacity .15s ease, transform .15s ease;
         vertical-align: middle;
       }
+      [${CONTINUE_BUTTON_ATTR}] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 28px;
+        min-width: 36px;
+        margin: 0 4px 0 2px;
+        padding: 0 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,.14);
+        background: rgba(63,63,70,.45);
+        color: #e4e4e7;
+        font: 12px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+        cursor: pointer;
+        user-select: none;
+        transition: background .15s ease, border-color .15s ease, color .15s ease, opacity .15s ease;
+        vertical-align: middle;
+        flex: 0 0 auto;
+      }
+      [${CONTINUE_BUTTON_ATTR}]:hover {
+        background: rgba(82,82,91,.8);
+        border-color: rgba(255,255,255,.28);
+      }
+      [${CONTINUE_BUTTON_ATTR}][data-busy="1"] {
+        opacity: .72;
+        cursor: progress;
+        pointer-events: none;
+      }
       [${BUTTON_ATTR}]:hover {
         background: rgba(82,82,91,.8);
         border-color: rgba(255,255,255,.28);
@@ -1502,6 +1545,300 @@ author: Codex++ Community
     return button;
   }
 
+  function createContinueButton() {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.setAttribute(CONTINUE_BUTTON_ATTR, "true");
+    button.dataset.version = SCRIPT_VERSION;
+    button.textContent = CONTINUE_PROMPT_TEXT;
+    button.setAttribute("title", "填入「继续」并发送");
+    button.setAttribute("aria-label", "填入继续并发送");
+    button.addEventListener("click", onContinueButtonClick);
+    return button;
+  }
+
+  function getOrCreateContinueButton() {
+    let button = runtime.continueButton;
+    if (button instanceof HTMLElement && button.isConnected && button.dataset.version === SCRIPT_VERSION) {
+      return button;
+    }
+    button = document.querySelector(`[${CONTINUE_BUTTON_ATTR}]`);
+    if (button instanceof HTMLElement && button.dataset.version === SCRIPT_VERSION) {
+      runtime.continueButton = button;
+      return button;
+    }
+    button?.remove();
+    button = createContinueButton();
+    runtime.continueButton = button;
+    return button;
+  }
+
+  function placeContinueBeforeSparkle(sparkle) {
+    if (!(sparkle instanceof HTMLElement) || !sparkle.isConnected) return null;
+    const cont = getOrCreateContinueButton();
+    const parent = sparkle.parentElement;
+    if (!(parent instanceof HTMLElement)) return cont;
+    try {
+      if (cont.parentElement !== parent || cont.nextElementSibling !== sparkle) {
+        parent.insertBefore(cont, sparkle);
+      }
+    } catch (_) {
+      try {
+        sparkle.before?.(cont);
+      } catch (__) {
+        /* ignore */
+      }
+    }
+    document.querySelectorAll(`[${CONTINUE_BUTTON_ATTR}]`).forEach((node) => {
+      if (node !== cont) node.remove();
+    });
+    return cont;
+  }
+
+  function isStopControl(el) {
+    if (!(el instanceof HTMLElement)) return false;
+    const label = `${elementLabel(el)} ${el.getAttribute("aria-label") || ""} ${el.getAttribute("title") || ""}`;
+    if (/stop|停止/i.test(label) && !/send|发送|提交/i.test(label)) return true;
+    return false;
+  }
+
+  function isNotificationControl(el) {
+    if (!(el instanceof Element)) return false;
+    const label = `${elementLabel(el)} ${el.getAttribute("aria-label") || ""} ${el.getAttribute("title") || ""}`;
+    const cls = classNameText(el);
+    const testId = `${el.getAttribute("data-testid") || ""} ${el.getAttribute("data-test-id") || ""}`;
+    if (/notif|通知|bell|铃铛/i.test(label)) return true;
+    if (/notif|bell/i.test(testId)) return true;
+    if (/codicon-bell|notification/i.test(cls)) return true;
+    if (el.querySelector?.(".codicon-bell, [class*='codicon-bell'], [class*='notification']")) return true;
+    // Status bar / window chrome (Cursor Tab row), not composer.
+    if (el.closest?.(".statusbar, [class*='statusbar'], [class*='status-bar'], .titlebar, [class*='titlebar']")) {
+      return true;
+    }
+    return false;
+  }
+
+  function hasSendArrowIcon(el) {
+    if (!(el instanceof Element)) return false;
+    return !!(
+      el.querySelector?.(
+        ".codicon-arrow-up, .codicon-send, [class*='codicon-arrow-up'], [class*='codicon-send'], [class*='arrow-up']",
+      ) ||
+      /codicon-arrow-up|codicon-send|arrow-up/i.test(classNameText(el))
+    );
+  }
+
+  function findComposerSendScopes(input) {
+    const scopes = [];
+    const cont = document.querySelector(`[${CONTINUE_BUTTON_ATTR}]`);
+    const sparkle = document.querySelector(`[${BUTTON_ATTR}]`);
+    const anchor = cont || sparkle;
+    if (anchor instanceof Element) {
+      const mount =
+        anchor.closest?.(
+          ".composer-button-area, .composer-bar-input-buttons, .button-container, [class*='composer-button'], [class*='composer-bar']",
+        ) || anchor.parentElement;
+      if (mount) scopes.push(mount);
+      const bar = anchor.closest?.(
+        ".composer-bar, .composer-bar-input-buttons, [class*='composer-bar'], [class*='composer-input'], [class*='composer-surface']",
+      );
+      if (bar && bar !== mount) scopes.push(bar);
+    }
+    if (input instanceof Element) {
+      const near = input.closest?.(
+        ".composer-bar-input-buttons, .composer-bar, .composer-input, [class*='composer-bar'], [class*='composer-surface'], [class*='composer']",
+      );
+      if (near && !scopes.includes(near)) scopes.push(near);
+    }
+    return scopes;
+  }
+
+  function scoreComposerSendCandidate(el, mountRect) {
+    if (!(el instanceof HTMLElement) || !isVisible(el)) return -999;
+    if (el.hasAttribute?.(BUTTON_ATTR) || el.hasAttribute?.(CONTINUE_BUTTON_ATTR)) return -999;
+    if (el.closest?.(`[${BUTTON_ATTR}], [${CONTINUE_BUTTON_ATTR}], [${PANEL_ATTR}]`)) return -999;
+    if (isNotificationControl(el) || isPlusOrAccessControl(el) || isFolderOrPathControl(el)) return -999;
+    if (isStopControl(el)) return -50;
+
+    const label = collapseWs(elementLabel(el));
+    const aria = `${el.getAttribute("aria-label") || ""} ${el.getAttribute("title") || ""}`;
+    const testId = `${el.getAttribute("data-testid") || ""} ${el.getAttribute("data-test-id") || ""}`;
+    const type = (el.getAttribute("type") || "").toLowerCase();
+    const rect = el.getBoundingClientRect();
+    let score = 0;
+
+    if (type === "submit") score += 40;
+    if (/^(send|提交|发送)$/i.test(label) || /^(send|提交|发送)$/i.test(collapseWs(aria))) score += 80;
+    if (/send|提交|发送/i.test(aria)) score += 50;
+    if (/send|submit/i.test(testId)) score += 40;
+    if (hasSendArrowIcon(el)) score += 70;
+    if (SEND_LABEL_RE.test(label) && !/stop|停止/i.test(label)) score += 45;
+
+    // Same toolbar row as 继续/✨ — prefer rightmost compact control.
+    if (mountRect) {
+      if (rect.top <= mountRect.bottom + 8 && rect.bottom >= mountRect.top - 8) score += 25;
+      if (rect.left >= mountRect.left - 4) score += 10;
+      score += Math.min(25, Math.max(0, (rect.left - mountRect.left) / Math.max(1, mountRect.width)) * 25);
+    }
+
+    if (rect.width <= 48 && rect.height <= 48) score += 8;
+    if (el.getAttribute("aria-haspopup") === "menu") score -= 60;
+    if (/attach|mic|paperclip|麦克风|voice|image|图片/i.test(aria + label)) score -= 80;
+    if (el.querySelector?.(".codicon-attach, .codicon-mic, [class*='paperclip'], [class*='microphone']")) score -= 80;
+    if (looksLikeModelLabel(label)) score -= 100;
+
+    return score;
+  }
+
+  function findCursorComposerSendButton(input = findComposerInput()) {
+    const scopes = findComposerSendScopes(input);
+    let best = null;
+    let bestScore = 40;
+
+    for (const scope of scopes) {
+      if (!(scope instanceof Element)) continue;
+      const mountRect = scope.getBoundingClientRect();
+      // Direct hits first: arrow-up / explicit Send in this toolbar.
+      const direct = Array.from(
+        scope.querySelectorAll(
+          "button, [role='button'], [type='submit'], a[role='button']",
+        ),
+      ).filter((el) => el instanceof HTMLElement);
+      for (const el of direct) {
+        const score = scoreComposerSendCandidate(el, mountRect);
+        if (score > bestScore) {
+          bestScore = score;
+          best = el;
+        }
+      }
+    }
+
+    // Prefer an explicit arrow-up sibling to the right of sparkle/continue.
+    const sparkle = document.querySelector(`[${BUTTON_ATTR}]`);
+    const parent = sparkle?.parentElement;
+    if (parent instanceof HTMLElement) {
+      const kids = Array.from(parent.querySelectorAll("button, [role='button']")).filter(
+        (el) => el instanceof HTMLElement && el !== sparkle && !el.hasAttribute?.(CONTINUE_BUTTON_ATTR),
+      );
+      for (const el of kids) {
+        if (!hasSendArrowIcon(el) && !/send|发送|提交/i.test(`${el.getAttribute("aria-label") || ""} ${elementLabel(el)}`)) {
+          continue;
+        }
+        if (isNotificationControl(el) || isStopControl(el)) continue;
+        const score = scoreComposerSendCandidate(el, parent.getBoundingClientRect()) + 15;
+        if (score > bestScore) {
+          bestScore = score;
+          best = el;
+        }
+      }
+    }
+
+    return best;
+  }
+
+  function pressComposerEnter(input) {
+    if (!(input instanceof HTMLElement)) return false;
+    try {
+      input.focus();
+      const base = {
+        key: "Enter",
+        code: "Enter",
+        keyCode: 13,
+        which: 13,
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      };
+      // Cursor Agent: Enter sends; some modes want Ctrl/Cmd+Enter — try plain first then Ctrl.
+      input.dispatchEvent(new KeyboardEvent("keydown", base));
+      input.dispatchEvent(new KeyboardEvent("keypress", base));
+      input.dispatchEvent(new KeyboardEvent("keyup", base));
+      const withCtrl = { ...base, ctrlKey: true, metaKey: false };
+      // Only as secondary pulse if plain Enter did not clear the draft shortly after.
+      window.setTimeout(() => {
+        try {
+          const still = normalizeText(readComposerText(findComposerInput() || input));
+          if (still === CONTINUE_PROMPT_TEXT || still.trim() === CONTINUE_PROMPT_TEXT) {
+            const active = findComposerInput() || input;
+            active.focus();
+            active.dispatchEvent(new KeyboardEvent("keydown", withCtrl));
+            active.dispatchEvent(new KeyboardEvent("keyup", withCtrl));
+          }
+        } catch (_) {
+          /* ignore */
+        }
+      }, 80);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function clickComposerSend(input = findComposerInput()) {
+    // Never use document-wide findSendButton here — it can hit the status-bar notification bell
+    // ("无新通知") which sits far-right and scores like a compact send control.
+    const send = findCursorComposerSendButton(input);
+    if (send instanceof HTMLElement) {
+      if (isStopControl(send)) return { ok: false, reason: "generating" };
+      if (isNotificationControl(send)) return { ok: false, reason: "send-not-found" };
+      try {
+        send.focus?.();
+        send.click();
+        return { ok: true, via: "click" };
+      } catch (_) {
+        /* fall through to Enter */
+      }
+    }
+    if (pressComposerEnter(input)) {
+      return { ok: true, via: "enter" };
+    }
+    return { ok: false, reason: "send-not-found" };
+  }
+
+  async function runContinueAndSend() {
+    if (runtime.continueBusy) return;
+    const cont = document.querySelector(`[${CONTINUE_BUTTON_ATTR}]`);
+    runtime.continueBusy = true;
+    if (cont instanceof HTMLElement) cont.dataset.busy = "1";
+    try {
+      const input = findComposerInput();
+      if (!(input instanceof HTMLElement)) {
+        showToast("未找到对话输入框", "error");
+        return;
+      }
+      const writeResult = writeComposerText(CONTINUE_PROMPT_TEXT, input);
+      if (!writeResult.ok) {
+        showToast("无法写入输入框", "error");
+        return;
+      }
+      await afterEditorPaint();
+      const active = findComposerInput() || input;
+      const verified = normalizeText(readComposerText(active));
+      if (verified !== CONTINUE_PROMPT_TEXT && verified.trim() !== CONTINUE_PROMPT_TEXT) {
+        showToast("未能写入「继续」", "error");
+        return;
+      }
+      runtime.lastWrittenText = verified;
+      const sent = clickComposerSend(active);
+      if (!sent.ok) {
+        if (sent.reason === "generating") {
+          showToast("当前正在生成，请稍后再点「继续」", "warn");
+        } else {
+          showToast("已写入「继续」，但未找到发送按钮", "warn");
+        }
+      }
+    } finally {
+      runtime.continueBusy = false;
+      if (cont instanceof HTMLElement) cont.dataset.busy = "0";
+    }
+  }
+
+  function onContinueButtonClick(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    runContinueAndSend();
+  }
+
   function placementLooksValid(found) {
     if (!found?.group || !found.modelItem) return false;
     if (isInSidebar(found.group) || isInSidebar(found.modelItem)) return false;
@@ -1547,6 +1884,7 @@ author: Codex++ Community
         (isModelControl(next) || looksLikeModelLabel(elementLabel(next)) || next.getAttribute?.("aria-haspopup") === "menu")
       ) {
         refreshButtonAppearance(button);
+        placeContinueBeforeSparkle(button);
         bindComposerInputWatch();
         return;
       }
@@ -1561,6 +1899,7 @@ author: Codex++ Community
         const next = button.nextElementSibling;
         if (next && (isModelControl(next) || looksLikeModelLabel(elementLabel(next)) || next.getAttribute?.("aria-haspopup") === "menu")) {
           refreshButtonAppearance(button);
+          placeContinueBeforeSparkle(button);
           bindComposerInputWatch();
           return;
         }
@@ -1576,6 +1915,7 @@ author: Codex++ Community
         if (node !== button) node.remove();
       });
       refreshButtonAppearance(button);
+      placeContinueBeforeSparkle(button);
       bindComposerInputWatch();
       debugLog("placement=float", {
         actionRow: !!findComposerActionRow(),
@@ -1628,6 +1968,7 @@ author: Codex++ Community
     }
 
     refreshButtonAppearance(button);
+    placeContinueBeforeSparkle(button);
     bindComposerInputWatch();
     debugLog("placement=inline", {
       strategy: strategy || "unknown",
@@ -2301,7 +2642,9 @@ author: Codex++ Community
     }
     runtime.inputListeners.clear();
     closeSettingsPanel();
-    document.querySelectorAll(`[${BUTTON_ATTR}], [${TOAST_ATTR}], [${PANEL_ATTR}], [${FLOAT_HOST_ATTR}]`).forEach((node) => node.remove());
+    document.querySelectorAll(`[${BUTTON_ATTR}], [${CONTINUE_BUTTON_ATTR}], [${TOAST_ATTR}], [${PANEL_ATTR}], [${FLOAT_HOST_ATTR}]`).forEach((node) => node.remove());
+    runtime.button = null;
+    runtime.continueButton = null;
     document.getElementById(STYLE_ID)?.remove();
     if (window[API_KEY] === api) {
       try {

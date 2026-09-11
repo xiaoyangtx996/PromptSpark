@@ -30,7 +30,7 @@ const PATCH_END = "<!-- /PROMPTSPARK-PATCH -->";
 const LEGACY_PATCH_BEGIN = "<!-- PROMPT-OPTIMIZE-PATCH -->";
 const LEGACY_PATCH_END = "<!-- /PROMPT-OPTIMIZE-PATCH -->";
 const PATCH_ASSET = "promptspark.js";
-const APP_VERSION = "1.3.3";
+const APP_VERSION = "1.3.5";
 
 function promptSparkDataRoot() {
   const { localAppData, home } = winEnvPaths();
@@ -1148,7 +1148,7 @@ async function main() {
     await relaunchHosts(selected, targets);
   }
 
-  console.log("\n完成。交互：左键优化 / 再点还原 / 右键或 Alt+点击打开设置。");
+  console.log("\n完成。交互：左侧「继续」发送 / 闪光优化 / 再点还原 / 右键或 Alt+点击打开设置。");
   if (!uninstallMode) {
     console.log(`API 请求经本地代理 http://127.0.0.1:${PROXY_PORT}（Cursor 需此代理绕过 CORS）。`);
     console.log("代理由 Cursor 扩展随进程启动。Codex 用户请使用 Codex++。");

@@ -37,6 +37,7 @@
    * Cursor DOM:
    *   .composer-bar-input-buttons > .button-container.composer-button-area > [attach][mic]...
    * Place as the first child of .composer-button-area (leftmost of right tools).
+   * Desired order: [继续] [✨] [attach] [mic] ...
    */
   function findWorkbenchButtonMount() {
     const areas = Array.from(
@@ -57,7 +58,10 @@
       // Prefer right half
       if (r.left < window.innerWidth * 0.35) continue;
       const first = Array.from(el.children).find(
-        (n) => n instanceof HTMLElement && !n.hasAttribute?.(BUTTON_ATTR),
+        (n) =>
+          n instanceof HTMLElement &&
+          !n.hasAttribute?.(BUTTON_ATTR) &&
+          !n.hasAttribute?.(CONTINUE_BUTTON_ATTR),
       );
       return { mount: el, before: first || null };
     }
@@ -68,9 +72,9 @@
     const candidates = [];
     for (const el of document.querySelectorAll("button, a, [role='button']")) {
       if (!(el instanceof HTMLElement) || !isVisible(el) || isInSidebar(el)) continue;
-      if (el.hasAttribute?.(BUTTON_ATTR)) continue;
+      if (el.hasAttribute?.(BUTTON_ATTR) || el.hasAttribute?.(CONTINUE_BUTTON_ATTR)) continue;
       const label = elementLabel(el);
-      if (/智能体|自动|agent|auto|mode/i.test(label) && !/send|attach|mic/i.test(label)) continue;
+      if (/智能体|自动|agent|auto/i.test(label) && !/send|attach|mic/i.test(label)) continue;
       const looks =
         /attach|attachment|paperclip|麦克风|voice|mic|send|发送|上传/i.test(label) ||
         !!el.querySelector?.(".codicon-attach, .codicon-mic, .codicon-send, [class*='paperclip']");
@@ -149,7 +153,9 @@
       "cursor:pointer",
     ].join(";");
     // Mirror peer button size if available
-    const peer = mount?.querySelector?.("button:not([" + BUTTON_ATTR + "])");
+    const peer = mount?.querySelector?.(
+      `button:not([${BUTTON_ATTR}]):not([${CONTINUE_BUTTON_ATTR}])`,
+    );
     if (peer instanceof HTMLElement) {
       const cs = window.getComputedStyle(peer);
       const w = peer.getBoundingClientRect();
@@ -160,6 +166,44 @@
       }
       if (cs.borderRadius) button.style.borderRadius = cs.borderRadius;
     }
+  }
+
+  function syncContinueChrome(button, mount) {
+    if (!(button instanceof HTMLElement)) return;
+    const peer = mount?.querySelector?.(
+      `button:not([${BUTTON_ATTR}]):not([${CONTINUE_BUTTON_ATTR}])`,
+    );
+    let height = 24;
+    if (peer instanceof HTMLElement) {
+      const h = peer.getBoundingClientRect().height;
+      if (h >= 18 && h <= 36) height = Math.round(h);
+    }
+    button.style.cssText = [
+      "display:inline-flex",
+      "align-items:center",
+      "justify-content:center",
+      `height:${height}px`,
+      "min-width:36px",
+      "width:auto",
+      "margin:0 4px 0 0",
+      "padding:0 8px",
+      "border:none",
+      "background:transparent",
+      "box-shadow:none",
+      "outline:none",
+      "flex:0 0 auto",
+      "align-self:center",
+      "position:relative",
+      "top:0",
+      "vertical-align:middle",
+      "cursor:pointer",
+      "font:12px/1 system-ui,-apple-system,'Segoe UI',sans-serif",
+      "color:inherit",
+      "opacity:0.85",
+      "white-space:nowrap",
+      "letter-spacing:0.02em",
+      "user-select:none",
+    ].join(";");
   }
 
   function ensureWorkbenchSparkleButton() {
@@ -176,6 +220,9 @@
       placeButtonBefore(button, spot.mount, spot.before instanceof Element ? spot.before : null);
       syncButtonChrome(button, spot.mount);
 
+      const cont = placeContinueBeforeSparkle(button);
+      if (cont) syncContinueChrome(cont, spot.mount);
+
       document.querySelectorAll(`[${BUTTON_ATTR}]`).forEach((node) => {
         if (node !== button) node.remove();
       });
@@ -185,6 +232,11 @@
     }
 
     if (button.isConnected && button.dataset.placement === "workbench-inline" && isVisible(button)) {
+      placeContinueBeforeSparkle(button);
+      const cont = document.querySelector(`[${CONTINUE_BUTTON_ATTR}]`);
+      if (cont instanceof HTMLElement && button.parentElement) {
+        syncContinueChrome(cont, button.parentElement);
+      }
       refreshButtonAppearance(button);
       bindComposerInputWatch();
       return;
@@ -194,6 +246,8 @@
     button.dataset.placement = "float";
     if (button.parentElement !== host) host.appendChild(button);
     syncButtonChrome(button, host);
+    const cont = placeContinueBeforeSparkle(button);
+    if (cont) syncContinueChrome(cont, host);
     refreshButtonAppearance(button);
     bindComposerInputWatch();
   }
