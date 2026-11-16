@@ -38,11 +38,17 @@ if (!fs.existsSync(iconPng)) throw new Error("cursor-extension/media/icon.png mi
 rimraf(STAGE);
 fs.mkdirSync(STAGE, { recursive: true });
 
-const files = ["package.json", "extension.js", "proxy-server.cjs"];
+const files = ["package.json", "extension.js", "proxy-server.cjs", ".vscodeignore"];
 for (const name of files) {
-  copyFile(path.join(EXT_SRC, name), path.join(STAGE, name));
+  const srcPath = path.join(EXT_SRC, name);
+  if (!fs.existsSync(srcPath)) continue;
+  copyFile(srcPath, path.join(STAGE, name));
 }
 copyFile(script, path.join(STAGE, "promptspark.js"));
+const licenseSrc = path.join(ROOT, "LICENSE");
+if (fs.existsSync(licenseSrc)) {
+  copyFile(licenseSrc, path.join(STAGE, "LICENSE"));
+}
 // Brand icon for Extensions view
 const mediaSrc = path.join(EXT_SRC, "media");
 if (fs.existsSync(mediaSrc)) {
@@ -59,8 +65,7 @@ const outPath = path.join(DIST, outName);
 let packed = false;
 try {
   execSync(
-    "npx --yes @vscode/vsce package --no-dependencies --allow-missing-repository --out " +
-      JSON.stringify(outPath),
+    "npx --yes @vscode/vsce package --no-dependencies --out " + JSON.stringify(outPath),
     {
       cwd: STAGE,
       stdio: "inherit",

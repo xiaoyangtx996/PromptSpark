@@ -6,7 +6,7 @@ const http = require("node:http");
 
 const PORT = Number(process.env.CPO_PROXY_PORT || 37841);
 const HOST = "127.0.0.1";
-const VERSION = "1.4.9";
+const VERSION = "1.4.10";
 
 let server = null;
 

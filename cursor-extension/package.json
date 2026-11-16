@@ -2,13 +2,22 @@
   "name": "promptspark",
   "displayName": "PromptSpark",
   "description": "Cursor Composer 提示词优化与快捷命令；随扩展启动本机 LLM 代理。",
-  "version": "1.4.9",
+  "version": "1.4.10",
   "publisher": "promptspark",
   "icon": "media/icon.png",
   "galleryBanner": {
     "color": "#0F1115",
     "theme": "dark"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xiaoyangtx996/PromptSpark.git"
+  },
+  "homepage": "https://github.com/xiaoyangtx996/PromptSpark",
+  "bugs": {
+    "url": "https://github.com/xiaoyangtx996/PromptSpark/issues"
+  },
+  "license": "MIT",
   "engines": {
     "vscode": "^1.80.0"
   },

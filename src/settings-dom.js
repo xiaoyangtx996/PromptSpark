@@ -793,7 +793,7 @@
       warnEl,
       cpoEl("p", {
         className: "cpo-footnote",
-        text: `通道 ${typeof HOST === "string" ? HOST : "auto"} · 本地代理随宿主启动 · 127.0.0.1:37841`,
+        text: `宿主 ${typeof HOST === "string" ? HOST : "cursor"} · 扩展本机代理 127.0.0.1:37841（随 PromptSpark 启动）`,
       }),
     );
 

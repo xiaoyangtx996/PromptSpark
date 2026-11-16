@@ -2277,196 +2277,6 @@ author: Codex++ Community
       .replace(/\s+/g, "");
   }
 
-  function structureScore(value) {
-    const s = normalizeText(value);
-    const blanks = (s.match(/\n\n/g) || []).length;
-    const labels = (s.match(/(^|\n)\s*(角色|目标|上下文|约束|工作方式|工作流程|输出要求|沟通要求|最终输出|Role|Goal|Context|Constraints|Workflow|Output)\s*[：:]/g) || [])
-      .length;
-    const lines = s.split("\n").filter((line) => line.trim()).length;
-    const jammedPenalty = s.length > 200 && blanks === 0 ? 80 : 0;
-    return blanks * 3 + labels * 8 + Math.min(lines, 40) - jammedPenalty;
-  }
-
-  /**
-   * Model often returns: jammed copy + clean labeled copy (+ original draft),
-   * or the same structured prompt 2–N times. Keep ONE best copy only.
-   */
-  function finalizeOptimizedPrompt(text, originalDraft = "") {
-    let t = stripTrailingOriginalDraft(normalizeText(text).trim(), originalDraft);
-    t = collapseSelfSimilarCopies(t);
-    t = preferLabeledStructuredCopy(t);
-    t = collapseSelfSimilarCopies(t);
-    t = dedupeRepeatedPromptBlocks(t);
-    t = ensurePlainSectionSpacing(t);
-    t = stripTrailingOriginalDraft(t, originalDraft);
-    t = collapseSelfSimilarCopies(t);
-    t = dedupeRepeatedPromptBlocks(t);
-    return t.replace(/\n{3,}/g, "\n\n").trim();
-  }
-
-  function stripTrailingOriginalDraft(text, originalDraft) {
-    const t = normalizeText(text).trim();
-    const o = normalizeText(originalDraft).trim();
-    if (!o || o.length < 16 || t.length < o.length + 40) return t;
-    if (t === o) return t;
-    if (t.endsWith(o)) return t.slice(0, -o.length).trim();
-
-    const tKey = compactKey(t);
-    const oKey = compactKey(o);
-    if (oKey.length >= 16 && tKey.endsWith(oKey) && tKey.length > oKey.length + 40) {
-      let left = t.length;
-      let matched = 0;
-      while (left > 0 && matched < oKey.length) {
-        left -= 1;
-        const ch = t[left];
-        if (/\s/.test(ch)) continue;
-        const want = oKey[oKey.length - 1 - matched];
-        if (ch.toLowerCase() !== want) break;
-        matched += 1;
-      }
-      if (matched >= oKey.length) return t.slice(0, left).trim();
-    }
-    return t;
-  }
-
-  /** Map compact (no-whitespace) index → original string index. */
-  function buildCompactIndexMap(text) {
-    const map = [];
-    let compact = "";
-    for (let i = 0; i < text.length; i += 1) {
-      const ch = text[i];
-      if (/\s/.test(ch)) continue;
-      map.push(i);
-      compact += ch.toLowerCase();
-    }
-    return { compact, map };
-  }
-
-  /**
-   * Cut text at the second occurrence of a long opening fingerprint
-   * (whitespace-insensitive). Handles 2–N nearly identical pastes.
-   */
-  function collapseSelfSimilarCopies(text) {
-    let t = normalizeText(text).trim();
-    if (t.length < 90) return t;
-
-    for (let pass = 0; pass < 5; pass += 1) {
-      const { compact, map } = buildCompactIndexMap(t);
-      if (compact.length < 72 || map.length < 72) break;
-
-      let cutAt = -1;
-      const maxAnchor = Math.min(360, Math.floor(compact.length / 2));
-      for (let len = maxAnchor; len >= 36; len -= 8) {
-        const needle = compact.slice(0, len);
-        const minSecond = Math.max(len, Math.floor(compact.length * 0.15));
-        const second = compact.indexOf(needle, minSecond);
-        if (second > 0) {
-          cutAt = map[second];
-          break;
-        }
-      }
-      // Also try mid-string role intros as period starts (opening may be a partial bullet)
-      if (cutAt <= 0) {
-        const midHit = compact.search(/你是(?:一名)?|youarea/);
-        if (midHit > 36) {
-          const needle = compact.slice(midHit, Math.min(compact.length, midHit + 48));
-          if (needle.length >= 24) {
-            const second = compact.indexOf(needle, midHit + needle.length);
-            if (second > midHit) cutAt = map[second];
-          }
-        }
-      }
-      if (cutAt <= 0) break;
-      const next = t.slice(0, cutAt).trim();
-      if (next.length < 36 || next.length >= t.length) break;
-      t = next;
-    }
-    return t;
-  }
-
-  function collectCopyBoundaries(text) {
-    const t = text;
-    const marks = new Set([0]);
-    const roleRe = /(?:^|\n)\s*((?:角色|Role)\s*[：:])/g;
-    let m;
-    while ((m = roleRe.exec(t))) {
-      marks.add(m.index + (m[0].startsWith("\n") ? 1 : 0));
-    }
-    // Role intros: 你是… / You are…
-    const fpRe = /你是(?:一名)?[^。\n]{6,48}|You are (?:a |an )?[^.\n]{6,48}/gi;
-    while ((m = fpRe.exec(t))) {
-      // Prefer a nearby 角色： header just before the fingerprint
-      let start = m.index;
-      const headerZh = t.lastIndexOf("角色：", start);
-      const headerEn = t.lastIndexOf("Role:", start);
-      const headerAt = Math.max(headerZh, headerEn);
-      if (headerAt >= 0 && start - headerAt <= 48) start = headerAt;
-      marks.add(start);
-    }
-    return [...marks].filter((n) => n >= 0 && n < t.length).sort((a, b) => a - b);
-  }
-
-  function preferLabeledStructuredCopy(text) {
-    const t = normalizeText(text).trim();
-    if (t.length < 90) return t;
-
-    const bounds = collectCopyBoundaries(t);
-    if (bounds.length >= 2) {
-      // IMPORTANT: do NOT score the full text — N copies always beat 1 copy.
-      let best = "";
-      let bestScore = -Infinity;
-      for (let i = 0; i < bounds.length; i += 1) {
-        const end = i + 1 < bounds.length ? bounds[i + 1] : t.length;
-        const piece = t.slice(bounds[i], end).trim();
-        if (piece.length < 36) continue;
-        let score = structureScore(piece);
-        if (/(^|\n)\s*(?:角色|Role)\s*[：:]/.test(piece)) score += 24;
-        if (/(^|\n)\s*(?:目标|Goal)\s*[：:]/.test(piece)) score += 8;
-        if (score > bestScore) {
-          best = piece;
-          bestScore = score;
-        }
-      }
-      if (best && best.length >= 36) {
-        // If the winner still looks like jammed+labeled glued, peel jammed prefix.
-        const roleAt = best.search(/(^|\n)\s*(?:角色|Role)\s*[：:]/);
-        if (roleAt > 60) {
-          const prefix = best.slice(0, roleAt).trim();
-          const labeled = best.slice(roleAt).replace(/^\n/, "").trim();
-          const prefKey = compactKey(prefix);
-          const labKey = compactKey(labeled);
-          const probeLen = Math.min(80, Math.floor(Math.min(prefKey.length, labKey.length) / 3));
-          if (
-            probeLen >= 28 &&
-            (labKey.includes(prefKey.slice(0, probeLen)) || labKey.includes(prefKey.slice(-probeLen))) &&
-            structureScore(labeled) >= structureScore(prefix)
-          ) {
-            return labeled;
-          }
-        }
-        return best;
-      }
-    }
-
-    // No multi-bound hit: jammed prefix before first 角色：
-    const roleAt = t.search(/(^|\n)\s*(?:角色|Role)\s*[：:]/);
-    if (roleAt > 80) {
-      const prefix = t.slice(0, roleAt).trim();
-      const labeled = t.slice(roleAt).replace(/^\n/, "").trim();
-      const prefKey = compactKey(prefix);
-      const labKey = compactKey(labeled);
-      const probeLen = Math.min(100, Math.floor(Math.min(prefKey.length, labKey.length) / 3));
-      if (probeLen >= 36) {
-        const probe = prefKey.slice(Math.max(0, prefKey.length - probeLen));
-        const probe2 = prefKey.slice(0, probeLen);
-        if ((labKey.includes(probe) || labKey.includes(probe2)) && structureScore(labeled) > structureScore(prefix)) {
-          return labeled;
-        }
-      }
-    }
-    return t;
-  }
-
   /**
    * Insert blank lines before common section labels when the model jammed them
    * into one dense paragraph (typical after Markdown demotion).
@@ -2510,86 +2320,6 @@ author: Codex++ Community
     // "：1." / ":1)" glued lists after a label colon
     t = t.replace(/([：:])\s*(?=(?:\d+)[.)、])/g, "$1\n");
     return t.replace(/\n{3,}/g, "\n\n");
-  }
-
-  /**
-   * User drafts (and some model outputs) often paste the same prompt 2–3 times.
-   * Collapse whole-text repeats (even when jammed into one paragraph) and
-   * near-duplicate paragraphs.
-   */
-  function dedupeRepeatedPromptBlocks(text) {
-    let t = normalizeText(text).trim();
-    if (t.length < 120) return t;
-
-    // 1) Whole-copy collapse: opening chunk reappears → keep only the first copy.
-    // Try several anchor lengths so jammed triple-pastes still match.
-    const tryLens = [
-      Math.min(200, Math.floor(t.length / 4)),
-      Math.min(120, Math.floor(t.length / 3)),
-      80,
-      48,
-    ].filter((n, i, arr) => n >= 40 && arr.indexOf(n) === i);
-    for (const anchorLen of tryLens) {
-      const anchor = t.slice(0, anchorLen);
-      const second = t.indexOf(anchor, Math.max(anchorLen, Math.floor(t.length * 0.2)));
-      if (second > anchorLen + 20) {
-        t = t.slice(0, second).trim();
-        // Collapse further copies if still present (e.g. 3x paste already cut to 1+)
-        break;
-      }
-    }
-    // Second pass in case 3 copies left a 2x remainder
-    {
-      const anchorLen = Math.min(120, Math.floor(t.length / 3));
-      if (anchorLen >= 40) {
-        const anchor = t.slice(0, anchorLen);
-        const second = t.indexOf(anchor, Math.max(anchorLen, Math.floor(t.length * 0.25)));
-        if (second > anchorLen + 20) t = t.slice(0, second).trim();
-      }
-    }
-
-    // 2) Also catch repeats that start mid-text with a distinctive opener
-    //    (e.g. "你是一名…" appearing again after the first copy ends).
-    const openerMatch = t.match(/^(.{24,80}?)(?:[。.\n])/);
-    if (openerMatch) {
-      const opener = openerMatch[1];
-      const again = t.indexOf(opener, opener.length + 40);
-      if (again > 0 && again > t.length * 0.25) {
-        t = t.slice(0, again).trim();
-      }
-    }
-
-    // 3) Paragraph dedupe (whitespace-insensitive; catches jammed vs spaced copies)
-    const parts = t.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
-    if (parts.length < 2) {
-      return t.replace(/\n{3,}/g, "\n\n");
-    }
-    const out = [];
-    const seen = [];
-    for (const part of parts) {
-      const key = compactKey(part);
-      if (key.length < 28) {
-        out.push(part);
-        continue;
-      }
-      const head = key.slice(0, Math.min(72, key.length));
-      const dup = seen.some(
-        (s) =>
-          s === key ||
-          (s.length > 40 &&
-            key.length > 40 &&
-            (s.includes(head) || key.includes(s.slice(0, Math.min(72, s.length))))),
-      );
-      if (dup) continue;
-      seen.push(key);
-      out.push(part);
-    }
-    return out.join("\n\n").replace(/\n{3,}/g, "\n\n");
-  }
-
-  function withPlainTextOutputRule(system) {
-    // Upstream defaults already forbid a whole-answer markdown wrapper; do not append extra rules.
-    return String(system || "").trim();
   }
 
   function collectModelIds(payload) {
@@ -2907,11 +2637,11 @@ author: Codex++ Community
   }
 
   async function optimizePrompt(userText, settings, signal) {
-    // Pass user draft through as-is (no pre-dedupe). Write path also writes model output once.
+    // Pass user draft through as-is. Write path writes model output once (after light format).
     const rawDraft = normalizeText(userText);
-    const system = withPlainTextOutputRule(
-      settings.systemPrompts?.[settings.style] || DEFAULT_SYSTEM_PROMPTS[settings.style] || DEFAULT_SYSTEM_PROMPTS.structured,
-    );
+    const system = String(
+      settings.systemPrompts?.[settings.style] || DEFAULT_SYSTEM_PROMPTS[settings.style] || DEFAULT_SYSTEM_PROMPTS.structured || "",
+    ).trim();
     if (settings.protocol === "anthropic") {
       return callAnthropic({
         baseUrl: settings.baseUrl,
@@ -3080,18 +2810,18 @@ author: Codex++ Community
             </select>
           </label>
           <label>Base URL（HTTPS）
-            <input data-cpo="baseUrl" type="url" spellcheck="false" placeholder="https://api.krill-ai.com/codex/v1" />
+            <input data-cpo="baseUrl" type="url" spellcheck="false" placeholder="https://api.example.com/v1" />
           </label>
           <div class="cpo-prompt-block">
-            <div class="cpo-prompt-head"><span>Codex++ 请求通道</span></div>
+            <div class="cpo-prompt-head"><span>请求通道</span></div>
             <div style="font-size:12px;line-height:1.45;color:#d4d4d8;">
               ${hasCodexPlusBridge() && hasElectronFetchBridge()
-                ? "已检测到 LLM Bridge 与 Electron 原生通道；优先使用 /llm-proxy，不支持时自动兼容。"
+                ? "已检测到请求桥接与 Electron 原生通道；优先 /llm-proxy，不支持时自动兼容。本机代理 127.0.0.1:37841。"
                 : hasCodexPlusBridge()
-                  ? "已检测到 Codex++ LLM Bridge。"
+                  ? "已检测到请求桥接。本机代理 127.0.0.1:37841。"
                   : hasElectronFetchBridge()
-                    ? "已检测到 Electron 原生请求通道，可兼容当前 Codex++ 发行版。"
-                    : "当前版本未提供可用请求通道。"}
+                    ? "已检测到 Electron 原生请求通道。本机代理 127.0.0.1:37841。"
+                    : "将使用扩展本机代理 127.0.0.1:37841（需 PromptSpark 扩展已启动）。"}
             </div>
           </div>
           <label>API Key

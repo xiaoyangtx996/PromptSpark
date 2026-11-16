@@ -11,7 +11,7 @@ const sourcePath = path.join(root, "src", "prompt-optimize.codex-source.js");
 const adaptersPath = path.join(root, "src", "host-adapters.js");
 const settingsDomPath = path.join(root, "src", "settings-dom.js");
 const outPath = path.join(root, "dist", "prompt-optimize.js");
-const VERSION = "1.4.9";
+const VERSION = "1.4.10";
 
 let src = fs.readFileSync(sourcePath, "utf8");
 let adapters = fs.readFileSync(adaptersPath, "utf8");
@@ -393,22 +393,27 @@ src = src.replace(
   }`,
 );
 
-// optimizePrompt: resolve system prompt from styles list + force plain-text rule
+// optimizePrompt: resolve system prompt from styles list (no extra rule injection)
 src = src.replace(
   `async function optimizePrompt(userText, settings, signal) {
-    const system = withPlainTextOutputRule(
-      settings.systemPrompts?.[settings.style] || DEFAULT_SYSTEM_PROMPTS[settings.style] || DEFAULT_SYSTEM_PROMPTS.structured,
-    );`,
+    // Pass user draft through as-is. Write path writes model output once (after light format).
+    const rawDraft = normalizeText(userText);
+    const system = String(
+      settings.systemPrompts?.[settings.style] || DEFAULT_SYSTEM_PROMPTS[settings.style] || DEFAULT_SYSTEM_PROMPTS.structured || "",
+    ).trim();`,
   `async function optimizePrompt(userText, settings, signal) {
+    // Pass user draft through as-is. Write path writes model output once (after light format).
+    const rawDraft = normalizeText(userText);
     const styleRow = Array.isArray(settings.styles)
       ? settings.styles.find((s) => s.id === settings.style)
       : null;
-    const system = withPlainTextOutputRule(
+    const system = String(
       (styleRow && styleRow.systemPrompt) ||
         settings.systemPrompts?.[settings.style] ||
         DEFAULT_SYSTEM_PROMPTS[settings.style] ||
-        DEFAULT_SYSTEM_PROMPTS.structured,
-    );`,
+        DEFAULT_SYSTEM_PROMPTS.structured ||
+        "",
+    ).trim();`,
 );
 
 src = src.replace(
