@@ -24,17 +24,17 @@ if (!fs.existsSync(vsix)) {
 
 const notes = `## PromptSpark ${tag}
 
-### Install
-1. Download \`PromptSpark-${version}.vsix\`
-2. Drag into Cursor (or Extensions → Install from VSIX)
-3. Fully quit and reopen Cursor if prompted about Composer inject
+### 安装
+1. 下载 \`PromptSpark-${version}.vsix\`
+2. 拖进 Cursor（或扩展 → 从 VSIX 安装）
+3. 若提示已写入 Composer 控件，请完全退出并重新打开 Cursor
 
-### Highlights
-- VSIX drag-install with in-process local proxy (\`127.0.0.1:37841\`)
-- Composer ✨ optimize / restore + Continue shortcut commands
-- Model list fetch from Base URL + API Key
-- Single paste write path for Composer (preserve newlines)
-- Default 简洁 / 结构化 / 编程 system prompts aligned with upstream
+### 更新说明
+- VSIX 拖装，扩展内嵌本机代理（\`127.0.0.1:37841\`）
+- Composer 闪光优化/还原 +「继续」快捷命令
+- 支持从 Base URL + API Key 拉取模型列表
+- 单次 paste 写入（保留换行）
+- 默认「简洁 / 结构化 / 编程」system prompt 与上游一致
 `;
 
 const notesFile = path.join(ROOT, "dist", `release-notes-${version}.md`);
