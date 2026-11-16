@@ -109,15 +109,19 @@ function Sync-Installer {
   New-Item -ItemType Directory -Path (Join-Path $InstallDir "dist") -Force | Out-Null
 
   Download-File "install.mjs" (Join-Path $InstallDir "install.mjs")
-  Download-File "proxy.mjs" (Join-Path $InstallDir "proxy.mjs")
-  Download-File "ensure-proxy.mjs" (Join-Path $InstallDir "ensure-proxy.mjs")
-  Download-File "cursor-runtime.mjs" (Join-Path $InstallDir "cursor-runtime.mjs")
   Download-File "dist/prompt-optimize.js" (Join-Path $InstallDir "dist\prompt-optimize.js")
+
+  $runtimeDir = Join-Path $InstallDir "runtime"
+  New-Item -ItemType Directory -Path $runtimeDir -Force | Out-Null
+  Download-File "runtime/proxy.mjs" (Join-Path $runtimeDir "proxy.mjs")
+  Download-File "runtime/ensure-proxy.mjs" (Join-Path $runtimeDir "ensure-proxy.mjs")
+  Download-File "runtime/cursor-runtime.mjs" (Join-Path $runtimeDir "cursor-runtime.mjs")
 
   $extDir = Join-Path $InstallDir "cursor-extension"
   New-Item -ItemType Directory -Path $extDir -Force | Out-Null
   Download-File "cursor-extension/package.json" (Join-Path $extDir "package.json")
   Download-File "cursor-extension/extension.js" (Join-Path $extDir "extension.js")
+  Try-Download -Url "$RawBase/cursor-extension/proxy-server.cjs" -OutFile (Join-Path $extDir "proxy-server.cjs") | Out-Null
 
   # optional helpers (best-effort)
   Try-Download -Url "$RawBase/package.json" -OutFile (Join-Path $InstallDir "package.json") | Out-Null

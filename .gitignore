@@ -1,4 +1,5 @@
 node_modules/
+dist/
 .proxy.pid
 *.log
 .DS_Store
@@ -6,3 +7,9 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# Local agent notes (not part of the product)
+KNOWLEDGE.md
+docs/
+*.tmp.mjs
+scripts/tmp-*.mjs

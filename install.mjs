@@ -15,14 +15,14 @@ import crypto from "node:crypto";
 import { spawn, execSync } from "node:child_process";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
-import { ensureProxyRunning as ensureProxyRunningShared } from "./ensure-proxy.mjs";
+import { ensureProxyRunning as ensureProxyRunningShared } from "./runtime/ensure-proxy.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
 const DIST = path.join(ROOT, "dist", "prompt-optimize.js");
-const PROXY_JS = path.join(ROOT, "proxy.mjs");
-const ENSURE_PROXY_JS = path.join(ROOT, "ensure-proxy.mjs");
-const CURSOR_RUNTIME_JS = path.join(ROOT, "cursor-runtime.mjs");
+const PROXY_JS = path.join(ROOT, "runtime", "proxy.mjs");
+const ENSURE_PROXY_JS = path.join(ROOT, "runtime", "ensure-proxy.mjs");
+const CURSOR_RUNTIME_JS = path.join(ROOT, "runtime", "cursor-runtime.mjs");
 const PROXY_PORT = 37841;
 const PROTOCOL_SCHEME = "promptspark";
 const PATCH_BEGIN = "<!-- PROMPTSPARK-PATCH -->";
@@ -30,7 +30,7 @@ const PATCH_END = "<!-- /PROMPTSPARK-PATCH -->";
 const LEGACY_PATCH_BEGIN = "<!-- PROMPT-OPTIMIZE-PATCH -->";
 const LEGACY_PATCH_END = "<!-- /PROMPT-OPTIMIZE-PATCH -->";
 const PATCH_ASSET = "promptspark.js";
-const APP_VERSION = "1.3.6";
+const APP_VERSION = "1.4.9";
 
 function promptSparkDataRoot() {
   const { localAppData, home } = winEnvPaths();
@@ -533,13 +533,13 @@ $s.Save()
 function cursorExtensionPaths() {
   const home = process.env.USERPROFILE || winEnvPaths().home;
   const root = path.join(home, ".cursor", "extensions");
-  const folderName = `promptspark.promptspark-proxy-${APP_VERSION}`;
+  const folderName = `promptspark.promptspark-${APP_VERSION}`;
   return {
     root,
     dir: path.join(root, folderName),
     folderName,
     extensionsJson: path.join(root, "extensions.json"),
-    id: "promptspark.promptspark-proxy",
+    id: "promptspark.promptspark",
     version: APP_VERSION,
   };
 }
@@ -558,39 +558,37 @@ function installCursorProxyExtension(proxyPaths, uninstall = false) {
   const srcDir = path.join(ROOT, "cursor-extension");
   if (uninstall) {
     fs.rmSync(ext.dir, { recursive: true, force: true });
-    // Remove older versions if any
+    // Remove older versions / Proxy-named installs
     if (exists(ext.root)) {
       for (const name of fs.readdirSync(ext.root)) {
-        if (/^promptspark\.promptspark-proxy-/i.test(name)) {
+        if (/^promptspark\.promptspark(-proxy)?-/i.test(name)) {
           fs.rmSync(path.join(ext.root, name), { recursive: true, force: true });
         }
       }
     }
     updateExtensionsJson(ext, null);
-    logStep("✓ 已移除 Cursor 代理扩展");
+    logStep("✓ 已移除 Cursor 扩展 PromptSpark");
     return { changed: true, action: "removed", path: ext.dir };
   }
   if (!exists(path.join(srcDir, "extension.js")) || !exists(path.join(srcDir, "package.json"))) {
     throw new Error("缺少 cursor-extension/ 源文件");
   }
-  const shared = deploySharedProxyRuntime();
+  const scriptBody = ensureBuilt();
   fs.mkdirSync(ext.dir, { recursive: true });
   fs.copyFileSync(path.join(srcDir, "package.json"), path.join(ext.dir, "package.json"));
   fs.copyFileSync(path.join(srcDir, "extension.js"), path.join(ext.dir, "extension.js"));
-  fs.writeFileSync(
-    path.join(ext.dir, "proxy-config.json"),
-    JSON.stringify(
-      {
-        node: process.execPath,
-        ensureProxy: shared.ensureProxy,
-        proxy: shared.proxy,
-        root: shared.root,
-      },
-      null,
-      2,
-    ),
-    "utf8",
-  );
+  if (exists(path.join(srcDir, "proxy-server.cjs"))) {
+    fs.copyFileSync(path.join(srcDir, "proxy-server.cjs"), path.join(ext.dir, "proxy-server.cjs"));
+  }
+  const mediaSrc = path.join(srcDir, "media");
+  const mediaDest = path.join(ext.dir, "media");
+  if (exists(mediaSrc)) {
+    fs.mkdirSync(mediaDest, { recursive: true });
+    for (const name of fs.readdirSync(mediaSrc)) {
+      fs.copyFileSync(path.join(mediaSrc, name), path.join(mediaDest, name));
+    }
+  }
+  fs.writeFileSync(path.join(ext.dir, "promptspark.js"), scriptBody, "utf8");
   updateExtensionsJson(ext, {
     identifier: { id: ext.id },
     version: ext.version,
@@ -610,7 +608,7 @@ function installCursorProxyExtension(proxyPaths, uninstall = false) {
       source: "vsix",
     },
   });
-  logStep(`✓ 已安装 Cursor 代理扩展（随 Cursor 启动）→ ${ext.dir}`);
+  logStep(`✓ 已安装 Cursor 扩展 PromptSpark → ${ext.dir}`);
   return { changed: true, action: "installed", path: ext.dir };
 }
 
@@ -627,7 +625,11 @@ function updateExtensionsJson(ext, entryOrNull) {
   }
   list = list.filter((item) => {
     const id = item?.identifier?.id || "";
-    return id !== ext.id && !String(id).startsWith("promptspark.promptspark-proxy");
+    return (
+      id !== ext.id &&
+      id !== "promptspark.promptspark-proxy" &&
+      !String(id).startsWith("promptspark.promptspark")
+    );
   });
   if (entryOrNull) list.push(entryOrNull);
   fs.writeFileSync(ext.extensionsJson, JSON.stringify(list), "utf8");

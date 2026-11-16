@@ -56,6 +56,7 @@ author: Codex++ Community
     }
   }
 
+  // Keep in sync with upstream GitHub defaults (xiaoyangtx996/PromptSpark).
   const DEFAULT_SYSTEM_PROMPTS = {
     concise: [
       "You are a prompt editor. Rewrite the user's draft into a clearer, tighter prompt.",
@@ -1228,37 +1229,15 @@ author: Codex++ Community
       input.focus();
       setNativeValue(input, next);
       dispatchInputEvents(input);
-      return { ok: true, input, next, token };
+      return { ok: true, input, next, token, method: "value" };
     }
 
-    input.focus();
-    selectElementContents(input);
-
-    let replaced = false;
-    try {
-      document.execCommand?.("selectAll", false, null);
-      document.execCommand?.("delete", false, null);
-      replaced = !!document.execCommand?.("insertText", false, next);
-    } catch (_) {
-      replaced = false;
+    // ProseMirror: paste once. insertText collapses \n into a single wall of text.
+    // Never chain paste+insertText in the same turn (that stacks duplicates).
+    if (writeViaPasteEvent(input, next)) {
+      return { ok: true, input, next, token, method: "paste" };
     }
-    if (!replaced) {
-      // Fallback: paste only (no insertText after) to avoid double write
-      replaced = writeViaPasteEvent(input, next);
-    }
-    if (!replaced) {
-      try {
-        input.textContent = next;
-        dispatchInputEvents(input);
-        replaced = normalizeText(readComposerText(input)) === next;
-      } catch (_) {
-        replaced = false;
-      }
-    } else {
-      dispatchInputEvents(input);
-    }
-    if (!replaced) return { ok: false, reason: "editor-write-unsupported" };
-    return { ok: true, input, next, token };
+    return { ok: false, reason: "editor-write-unsupported", input, next, token };
   }
 
   /** Shortcut command: exactly one write path, then caller sends. */
@@ -1299,30 +1278,63 @@ author: Codex++ Community
     });
   }
 
+  /** ProseMirror often alters whitespace; treat content as landed if compact text matches. */
+  function writeLooksSuccessful(verified, expected) {
+    const got = normalizeText(verified).trim();
+    const want = normalizeText(expected).trim();
+    if (!got || !want) return false;
+    if (got === want || got.trimEnd() === want.trimEnd()) return true;
+    const gotKey = compactKey(got);
+    const wantKey = compactKey(want);
+    if (gotKey === wantKey) return true;
+    if (wantKey.length >= 32 && gotKey.includes(wantKey.slice(0, Math.min(96, wantKey.length)))) {
+      // Editor kept the payload; minor truncation/prefix noise is OK
+      if (gotKey.length >= wantKey.length * 0.85) return true;
+    }
+    return false;
+  }
+
+  /** Write once. Format is applied before this call; never rewrite for styling. */
   async function writeComposerTextWithFallback(text, input = findComposerInput()) {
-    const result = writeComposerText(text, input);
-    if (result.ok) {
-      await afterEditorPaint();
-      if (result.token === runtime.writeToken && result.input.isConnected) {
-        const verified = normalizeText(readComposerText(result.input));
-        if (verified === result.next || verified.trimEnd() === result.next.trimEnd()) {
-          runtime.lastWrittenText = verified;
-          return { ok: true, verified: true, normalized: verified !== result.next };
-        }
-        result.reason = "write-mismatch";
-        result.verified = verified;
-      } else {
-        result.reason = "editor-changed";
-      }
+    const next = normalizeText(text);
+    const target = (input?.isConnected ? input : null) || findComposerInput();
+    if (!(target instanceof HTMLElement)) {
+      showToast("写入输入框失败：未找到输入框", "error");
+      return { ok: false, reason: "input-not-found" };
     }
-    try {
-      await navigator.clipboard.writeText(normalizeText(text));
-      showToast("无法直接写入输入框，已复制优化结果，请粘贴替换", "warn");
-      return { ok: false, reason: result.reason || "write-failed", clipboard: true };
-    } catch (_) {
-      showToast("写入输入框失败，且无法复制到剪贴板", "error");
-      return { ok: false, reason: result.reason || "write-failed", clipboard: false };
+
+    const before = normalizeText(readComposerText(target));
+    const result = writeComposerText(next, target);
+    if (!result.ok) {
+      showToast("写入输入框失败", "error");
+      return { ok: false, reason: result.reason || "write-failed" };
     }
+
+    // Paste applies asynchronously in ProseMirror — wait longer than insertText.
+    await afterEditorPaint();
+    await new Promise((resolve) => window.setTimeout(resolve, result.method === "paste" ? 200 : 60));
+    const live = result.input?.isConnected ? result.input : findComposerInput();
+    const verified = normalizeText(readComposerText(live));
+
+    if (writeLooksSuccessful(verified, next)) {
+      runtime.lastWrittenText = verified;
+      return { ok: true, verified: true, normalized: verified !== next, attempts: 1, method: result.method };
+    }
+
+    // Content clearly replaced (common when editor normalizes newlines) — treat as success.
+    // Do NOT write a second time; that caused「框里已有字却报写入失败」.
+    if (
+      verified.trim() &&
+      verified !== before &&
+      (compactKey(verified).includes(compactKey(next).slice(0, Math.min(64, compactKey(next).length))) ||
+        verified.length >= Math.max(40, Math.floor(next.length * 0.5)))
+    ) {
+      runtime.lastWrittenText = verified;
+      return { ok: true, verified: true, trusted: true, attempts: 1, method: result.method };
+    }
+
+    showToast("写入输入框失败", "error");
+    return { ok: false, reason: "write-mismatch", verified, before, attempts: 1 };
   }
 
   function getElementConversationId(element) {
@@ -1394,7 +1406,7 @@ author: Codex++ Community
         width: 28px;
         height: 28px;
         min-width: 28px;
-        margin: 0 2px;
+        margin: 0;
         padding: 0;
         border-radius: 999px;
         border: 1px solid rgba(255,255,255,.14);
@@ -1412,9 +1424,9 @@ author: Codex++ Community
         align-items: center;
         justify-content: center;
         height: 28px;
-        min-width: 36px;
-        margin: 0 4px 0 2px;
-        padding: 0 10px;
+        min-width: 0;
+        margin: 0;
+        padding: 0 4px;
         border-radius: 999px;
         border: 1px solid rgba(255,255,255,.14);
         background: rgba(63,63,70,.45);
@@ -2224,6 +2236,11 @@ author: Codex++ Community
       if (/\/messages$/i.test(base)) return base;
       return `${base}/v1/messages`;
     }
+    if (suffix === "/models" || suffix === "/v1/models") {
+      if (/\/models$/i.test(base)) return base;
+      if (/\/v1$/i.test(base)) return `${base}/models`;
+      return suffix === "/v1/models" ? `${base}/v1/models` : `${base}/models`;
+    }
     return `${base}${suffix.startsWith("/") ? suffix : `/${suffix}`}`;
   }
 
@@ -2231,6 +2248,381 @@ author: Codex++ Community
     const raw = normalizeText(text).trim();
     const match = raw.match(/^```(?:[a-zA-Z0-9_-]+)?\n([\s\S]*?)\n```$/);
     return match ? match[1].trimEnd() : raw;
+  }
+
+  /**
+   * Prepare model output for a single Composer write:
+   * light Markdown demote + section line-breaks. No dedupe, no second rewrite pass.
+   */
+  function demoteMarkdownForPlainInput(text, _originalDraft = "") {
+    let t = stripWholeFence(normalizeText(text));
+    t = t.replace(/^```(?:[a-zA-Z0-9_-]+)?\n([\s\S]*?)\n```$/gm, "$1");
+    t = t.replace(/^#{1,6}\s+/gm, "");
+    t = t.replace(/\*\*([^*]+)\*\*/g, "$1");
+    t = t.replace(/__([^_]+)__/g, "$1");
+    t = t.replace(/(^|[^\w])\*([^*\n]+)\*(?!\w)/g, "$1$2");
+    t = t.replace(/`([^`\n]+)`/g, "$1");
+    t = t.replace(/^>\s?/gm, "");
+    t = t.replace(/^(\s*)[-*+]\s+/gm, "$1· ");
+    t = t.replace(/^(\s*)(\d+)\.\s+/gm, "$1$2) ");
+    t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 $2");
+    t = t.replace(/[ \t]+\n/g, "\n");
+    t = ensurePlainSectionSpacing(t);
+    return t.replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  function compactKey(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/\s+/g, "");
+  }
+
+  function structureScore(value) {
+    const s = normalizeText(value);
+    const blanks = (s.match(/\n\n/g) || []).length;
+    const labels = (s.match(/(^|\n)\s*(角色|目标|上下文|约束|工作方式|工作流程|输出要求|沟通要求|最终输出|Role|Goal|Context|Constraints|Workflow|Output)\s*[：:]/g) || [])
+      .length;
+    const lines = s.split("\n").filter((line) => line.trim()).length;
+    const jammedPenalty = s.length > 200 && blanks === 0 ? 80 : 0;
+    return blanks * 3 + labels * 8 + Math.min(lines, 40) - jammedPenalty;
+  }
+
+  /**
+   * Model often returns: jammed copy + clean labeled copy (+ original draft),
+   * or the same structured prompt 2–N times. Keep ONE best copy only.
+   */
+  function finalizeOptimizedPrompt(text, originalDraft = "") {
+    let t = stripTrailingOriginalDraft(normalizeText(text).trim(), originalDraft);
+    t = collapseSelfSimilarCopies(t);
+    t = preferLabeledStructuredCopy(t);
+    t = collapseSelfSimilarCopies(t);
+    t = dedupeRepeatedPromptBlocks(t);
+    t = ensurePlainSectionSpacing(t);
+    t = stripTrailingOriginalDraft(t, originalDraft);
+    t = collapseSelfSimilarCopies(t);
+    t = dedupeRepeatedPromptBlocks(t);
+    return t.replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  function stripTrailingOriginalDraft(text, originalDraft) {
+    const t = normalizeText(text).trim();
+    const o = normalizeText(originalDraft).trim();
+    if (!o || o.length < 16 || t.length < o.length + 40) return t;
+    if (t === o) return t;
+    if (t.endsWith(o)) return t.slice(0, -o.length).trim();
+
+    const tKey = compactKey(t);
+    const oKey = compactKey(o);
+    if (oKey.length >= 16 && tKey.endsWith(oKey) && tKey.length > oKey.length + 40) {
+      let left = t.length;
+      let matched = 0;
+      while (left > 0 && matched < oKey.length) {
+        left -= 1;
+        const ch = t[left];
+        if (/\s/.test(ch)) continue;
+        const want = oKey[oKey.length - 1 - matched];
+        if (ch.toLowerCase() !== want) break;
+        matched += 1;
+      }
+      if (matched >= oKey.length) return t.slice(0, left).trim();
+    }
+    return t;
+  }
+
+  /** Map compact (no-whitespace) index → original string index. */
+  function buildCompactIndexMap(text) {
+    const map = [];
+    let compact = "";
+    for (let i = 0; i < text.length; i += 1) {
+      const ch = text[i];
+      if (/\s/.test(ch)) continue;
+      map.push(i);
+      compact += ch.toLowerCase();
+    }
+    return { compact, map };
+  }
+
+  /**
+   * Cut text at the second occurrence of a long opening fingerprint
+   * (whitespace-insensitive). Handles 2–N nearly identical pastes.
+   */
+  function collapseSelfSimilarCopies(text) {
+    let t = normalizeText(text).trim();
+    if (t.length < 90) return t;
+
+    for (let pass = 0; pass < 5; pass += 1) {
+      const { compact, map } = buildCompactIndexMap(t);
+      if (compact.length < 72 || map.length < 72) break;
+
+      let cutAt = -1;
+      const maxAnchor = Math.min(360, Math.floor(compact.length / 2));
+      for (let len = maxAnchor; len >= 36; len -= 8) {
+        const needle = compact.slice(0, len);
+        const minSecond = Math.max(len, Math.floor(compact.length * 0.15));
+        const second = compact.indexOf(needle, minSecond);
+        if (second > 0) {
+          cutAt = map[second];
+          break;
+        }
+      }
+      // Also try mid-string role intros as period starts (opening may be a partial bullet)
+      if (cutAt <= 0) {
+        const midHit = compact.search(/你是(?:一名)?|youarea/);
+        if (midHit > 36) {
+          const needle = compact.slice(midHit, Math.min(compact.length, midHit + 48));
+          if (needle.length >= 24) {
+            const second = compact.indexOf(needle, midHit + needle.length);
+            if (second > midHit) cutAt = map[second];
+          }
+        }
+      }
+      if (cutAt <= 0) break;
+      const next = t.slice(0, cutAt).trim();
+      if (next.length < 36 || next.length >= t.length) break;
+      t = next;
+    }
+    return t;
+  }
+
+  function collectCopyBoundaries(text) {
+    const t = text;
+    const marks = new Set([0]);
+    const roleRe = /(?:^|\n)\s*((?:角色|Role)\s*[：:])/g;
+    let m;
+    while ((m = roleRe.exec(t))) {
+      marks.add(m.index + (m[0].startsWith("\n") ? 1 : 0));
+    }
+    // Role intros: 你是… / You are…
+    const fpRe = /你是(?:一名)?[^。\n]{6,48}|You are (?:a |an )?[^.\n]{6,48}/gi;
+    while ((m = fpRe.exec(t))) {
+      // Prefer a nearby 角色： header just before the fingerprint
+      let start = m.index;
+      const headerZh = t.lastIndexOf("角色：", start);
+      const headerEn = t.lastIndexOf("Role:", start);
+      const headerAt = Math.max(headerZh, headerEn);
+      if (headerAt >= 0 && start - headerAt <= 48) start = headerAt;
+      marks.add(start);
+    }
+    return [...marks].filter((n) => n >= 0 && n < t.length).sort((a, b) => a - b);
+  }
+
+  function preferLabeledStructuredCopy(text) {
+    const t = normalizeText(text).trim();
+    if (t.length < 90) return t;
+
+    const bounds = collectCopyBoundaries(t);
+    if (bounds.length >= 2) {
+      // IMPORTANT: do NOT score the full text — N copies always beat 1 copy.
+      let best = "";
+      let bestScore = -Infinity;
+      for (let i = 0; i < bounds.length; i += 1) {
+        const end = i + 1 < bounds.length ? bounds[i + 1] : t.length;
+        const piece = t.slice(bounds[i], end).trim();
+        if (piece.length < 36) continue;
+        let score = structureScore(piece);
+        if (/(^|\n)\s*(?:角色|Role)\s*[：:]/.test(piece)) score += 24;
+        if (/(^|\n)\s*(?:目标|Goal)\s*[：:]/.test(piece)) score += 8;
+        if (score > bestScore) {
+          best = piece;
+          bestScore = score;
+        }
+      }
+      if (best && best.length >= 36) {
+        // If the winner still looks like jammed+labeled glued, peel jammed prefix.
+        const roleAt = best.search(/(^|\n)\s*(?:角色|Role)\s*[：:]/);
+        if (roleAt > 60) {
+          const prefix = best.slice(0, roleAt).trim();
+          const labeled = best.slice(roleAt).replace(/^\n/, "").trim();
+          const prefKey = compactKey(prefix);
+          const labKey = compactKey(labeled);
+          const probeLen = Math.min(80, Math.floor(Math.min(prefKey.length, labKey.length) / 3));
+          if (
+            probeLen >= 28 &&
+            (labKey.includes(prefKey.slice(0, probeLen)) || labKey.includes(prefKey.slice(-probeLen))) &&
+            structureScore(labeled) >= structureScore(prefix)
+          ) {
+            return labeled;
+          }
+        }
+        return best;
+      }
+    }
+
+    // No multi-bound hit: jammed prefix before first 角色：
+    const roleAt = t.search(/(^|\n)\s*(?:角色|Role)\s*[：:]/);
+    if (roleAt > 80) {
+      const prefix = t.slice(0, roleAt).trim();
+      const labeled = t.slice(roleAt).replace(/^\n/, "").trim();
+      const prefKey = compactKey(prefix);
+      const labKey = compactKey(labeled);
+      const probeLen = Math.min(100, Math.floor(Math.min(prefKey.length, labKey.length) / 3));
+      if (probeLen >= 36) {
+        const probe = prefKey.slice(Math.max(0, prefKey.length - probeLen));
+        const probe2 = prefKey.slice(0, probeLen);
+        if ((labKey.includes(probe) || labKey.includes(probe2)) && structureScore(labeled) > structureScore(prefix)) {
+          return labeled;
+        }
+      }
+    }
+    return t;
+  }
+
+  /**
+   * Insert blank lines before common section labels when the model jammed them
+   * into one dense paragraph (typical after Markdown demotion).
+   */
+  function ensurePlainSectionSpacing(text) {
+    let t = normalizeText(text);
+    // Longest first so 「最终输出内容」 does not split as 「最终」+「输出」
+    const labels = [
+      "最终输出内容",
+      "最终输出",
+      "输出要求",
+      "沟通要求",
+      "工作流程",
+      "工作方式",
+      "重点了解",
+      "提问要求",
+      "Edge cases",
+      "Non-goals",
+      "Acceptance",
+      "Constraints",
+      "Workflow",
+      "Context",
+      "Output",
+      "Verify",
+      "角色",
+      "目标",
+      "上下文",
+      "约束",
+      "边界",
+      "非目标",
+      "验收",
+      "Role",
+      "Goal",
+      "Task",
+    ];
+    const labelAlt = labels.map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+    // Break after sentence punctuation before section labels (写入前一次性排版)
+    t = t.replace(new RegExp(`([。！？；;.!?])\\s*(?=(?:${labelAlt})\\s*[：:])`, "g"), "$1\n\n");
+    // Numbered / bullet items glued after 。
+    t = t.replace(/([。；;])\s*(?=·|•|(?:\d+)[.)、])/g, "$1\n");
+    // "：1." / ":1)" glued lists after a label colon
+    t = t.replace(/([：:])\s*(?=(?:\d+)[.)、])/g, "$1\n");
+    return t.replace(/\n{3,}/g, "\n\n");
+  }
+
+  /**
+   * User drafts (and some model outputs) often paste the same prompt 2–3 times.
+   * Collapse whole-text repeats (even when jammed into one paragraph) and
+   * near-duplicate paragraphs.
+   */
+  function dedupeRepeatedPromptBlocks(text) {
+    let t = normalizeText(text).trim();
+    if (t.length < 120) return t;
+
+    // 1) Whole-copy collapse: opening chunk reappears → keep only the first copy.
+    // Try several anchor lengths so jammed triple-pastes still match.
+    const tryLens = [
+      Math.min(200, Math.floor(t.length / 4)),
+      Math.min(120, Math.floor(t.length / 3)),
+      80,
+      48,
+    ].filter((n, i, arr) => n >= 40 && arr.indexOf(n) === i);
+    for (const anchorLen of tryLens) {
+      const anchor = t.slice(0, anchorLen);
+      const second = t.indexOf(anchor, Math.max(anchorLen, Math.floor(t.length * 0.2)));
+      if (second > anchorLen + 20) {
+        t = t.slice(0, second).trim();
+        // Collapse further copies if still present (e.g. 3x paste already cut to 1+)
+        break;
+      }
+    }
+    // Second pass in case 3 copies left a 2x remainder
+    {
+      const anchorLen = Math.min(120, Math.floor(t.length / 3));
+      if (anchorLen >= 40) {
+        const anchor = t.slice(0, anchorLen);
+        const second = t.indexOf(anchor, Math.max(anchorLen, Math.floor(t.length * 0.25)));
+        if (second > anchorLen + 20) t = t.slice(0, second).trim();
+      }
+    }
+
+    // 2) Also catch repeats that start mid-text with a distinctive opener
+    //    (e.g. "你是一名…" appearing again after the first copy ends).
+    const openerMatch = t.match(/^(.{24,80}?)(?:[。.\n])/);
+    if (openerMatch) {
+      const opener = openerMatch[1];
+      const again = t.indexOf(opener, opener.length + 40);
+      if (again > 0 && again > t.length * 0.25) {
+        t = t.slice(0, again).trim();
+      }
+    }
+
+    // 3) Paragraph dedupe (whitespace-insensitive; catches jammed vs spaced copies)
+    const parts = t.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+    if (parts.length < 2) {
+      return t.replace(/\n{3,}/g, "\n\n");
+    }
+    const out = [];
+    const seen = [];
+    for (const part of parts) {
+      const key = compactKey(part);
+      if (key.length < 28) {
+        out.push(part);
+        continue;
+      }
+      const head = key.slice(0, Math.min(72, key.length));
+      const dup = seen.some(
+        (s) =>
+          s === key ||
+          (s.length > 40 &&
+            key.length > 40 &&
+            (s.includes(head) || key.includes(s.slice(0, Math.min(72, s.length))))),
+      );
+      if (dup) continue;
+      seen.push(key);
+      out.push(part);
+    }
+    return out.join("\n\n").replace(/\n{3,}/g, "\n\n");
+  }
+
+  function withPlainTextOutputRule(system) {
+    // Upstream defaults already forbid a whole-answer markdown wrapper; do not append extra rules.
+    return String(system || "").trim();
+  }
+
+  function collectModelIds(payload) {
+    const ids = [];
+    const seen = new Set();
+    const add = (value) => {
+      const id = String(value || "").trim();
+      if (!id || id.length > 220 || seen.has(id)) return;
+      if (/^(object|list|model|ok|success|true|false|null|undefined)$/i.test(id)) return;
+      seen.add(id);
+      ids.push(id);
+    };
+    const walk = (node, depth) => {
+      if (node == null || depth > 8) return;
+      if (typeof node === "string") {
+        add(node);
+        return;
+      }
+      if (Array.isArray(node)) {
+        for (const item of node) walk(item, depth + 1);
+        return;
+      }
+      if (typeof node !== "object") return;
+      if (typeof node.id === "string") add(node.id);
+      else if (typeof node.model === "string") add(node.model);
+      else if (typeof node.name === "string") add(node.name);
+      for (const key of ["data", "models", "result", "items", "list", "rows"]) {
+        if (node[key] != null) walk(node[key], depth + 1);
+      }
+    };
+    walk(payload, 0);
+    ids.sort((a, b) => a.localeCompare(b));
+    return ids;
   }
 
   function hasCodexPlusBridge() {
@@ -2413,7 +2805,7 @@ author: Codex++ Community
     return electronFetchJson(options);
   }
 
-  async function callOpenAI({ baseUrl, apiKey, model, system, user, signal }) {
+  async function callOpenAI({ baseUrl, apiKey, model, system, user, signal, originalDraft = "" }) {
     const upstream = joinUrl(baseUrl, "/chat/completions");
     const data = await requestJson({
       upstreamUrl: upstream,
@@ -2442,10 +2834,10 @@ author: Codex++ Community
     if (typeof content !== "string" || !content.trim()) {
       throw new Error("模型返回为空");
     }
-    return stripWholeFence(content);
+    return demoteMarkdownForPlainInput(content, originalDraft || user);
   }
 
-  async function callAnthropic({ baseUrl, apiKey, model, system, user, signal }) {
+  async function callAnthropic({ baseUrl, apiKey, model, system, user, signal, originalDraft = "" }) {
     const upstream = joinUrl(baseUrl, "/v1/messages");
     const data = await requestJson({
       upstreamUrl: upstream,
@@ -2471,18 +2863,63 @@ author: Codex++ Community
       .join("\n")
       .trim();
     if (!text) throw new Error("模型返回为空");
-    return stripWholeFence(text);
+    return demoteMarkdownForPlainInput(text, originalDraft || user);
+  }
+
+  async function listRemoteModels({ protocol, baseUrl, apiKey, signal }) {
+    if (!hasRequestTransport()) {
+      throw new Error("当前请求通道不可用");
+    }
+    const key = String(apiKey || "").trim();
+    if (!key) throw new Error("请先填写 API Key");
+    const isAnthropic = protocol === "anthropic";
+    const headers = isAnthropic
+      ? { "x-api-key": key, "anthropic-version": "2023-06-01" }
+      : { Authorization: `Bearer ${key}` };
+    const upstream = joinUrl(baseUrl, isAnthropic ? "/v1/models" : "/models");
+    const merged = [];
+    const seen = new Set();
+    let after = "";
+    for (let page = 0; page < 12; page += 1) {
+      const pageUrl = after ? `${upstream}${upstream.includes("?") ? "&" : "?"}after=${encodeURIComponent(after)}` : upstream;
+      const data = await requestJson({
+        upstreamUrl: pageUrl,
+        method: "GET",
+        headers,
+        body: null,
+        signal,
+      });
+      for (const id of collectModelIds(data)) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        merged.push(id);
+      }
+      const hasMore = data?.has_more === true || data?.data?.has_more === true;
+      const lastId =
+        (typeof data?.last_id === "string" && data.last_id) ||
+        (Array.isArray(data?.data) && data.data.length ? data.data[data.data.length - 1]?.id : "") ||
+        "";
+      if (!hasMore || !lastId || lastId === after) break;
+      after = String(lastId);
+    }
+    merged.sort((a, b) => a.localeCompare(b));
+    return merged;
   }
 
   async function optimizePrompt(userText, settings, signal) {
-    const system = settings.systemPrompts?.[settings.style] || DEFAULT_SYSTEM_PROMPTS[settings.style] || DEFAULT_SYSTEM_PROMPTS.structured;
+    // Pass user draft through as-is (no pre-dedupe). Write path also writes model output once.
+    const rawDraft = normalizeText(userText);
+    const system = withPlainTextOutputRule(
+      settings.systemPrompts?.[settings.style] || DEFAULT_SYSTEM_PROMPTS[settings.style] || DEFAULT_SYSTEM_PROMPTS.structured,
+    );
     if (settings.protocol === "anthropic") {
       return callAnthropic({
         baseUrl: settings.baseUrl,
         apiKey: settings.apiKey,
         model: settings.model,
         system,
-        user: userText,
+        user: rawDraft,
+        originalDraft: rawDraft,
         signal,
       });
     }
@@ -2491,7 +2928,8 @@ author: Codex++ Community
       apiKey: settings.apiKey,
       model: settings.model,
       system,
-      user: userText,
+      user: rawDraft,
+      originalDraft: rawDraft,
       signal,
     });
   }
@@ -2551,7 +2989,7 @@ author: Codex++ Community
         state.originalText = original;
         state.optimizedText = normalizeText(readComposerText(input)) || optimized;
         state.mode = "optimized";
-        showToast("已优化，再次点击可还原", "ok");
+        showToast(`已优化 v${SCRIPT_VERSION}，再次点击可还原`, "ok");
       }
     } catch (error) {
       if (cancelReason === "user") {

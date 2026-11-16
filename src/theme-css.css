@@ -8,7 +8,8 @@
   height: 28px;
   min-width: 28px;
   padding: 0;
-  margin: 0 2px;
+  /* Parent composer-button-area already has gap — don't stack extra margin */
+  margin: 0 !important;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -23,10 +24,10 @@
   align-items: center;
   justify-content: center;
   height: 28px;
-  min-width: 36px;
+  min-width: 0;
   width: auto;
-  margin: 0 4px 0 2px;
-  padding: 0 8px;
+  margin: 0 !important;
+  padding: 0 4px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -236,6 +237,25 @@
   padding-bottom: 8px;
 }
 
+[${PANEL_ATTR}].cpo-apple .cpo-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-brand-icon {
+  flex: 0 0 auto;
+  display: block;
+  border-radius: 8px;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.08);
+}
+[${PANEL_ATTR}].cpo-apple .cpo-brand-copy {
+  min-width: 0;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-brand-copy h2 {
+  margin: 0;
+}
+
 [${PANEL_ATTR}].cpo-apple .cpo-main-tab {
   flex: none;
   appearance: none;
@@ -404,6 +424,101 @@
 [${PANEL_ATTR}].cpo-apple .cpo-field > span {
   font-size: 11px;
   color: #86868b;
+}
+
+[${PANEL_ATTR}].cpo-apple .cpo-model-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-model-combo {
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+  width: auto;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-model-combo > input {
+  width: 100% !important;
+  padding-right: 36px !important;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-model-pick-btn {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  z-index: 2;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-model-combo.is-open .cpo-model-pick-btn {
+  color: #0071e3 !important;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-model-pick-menu {
+  /* width/left set by placeModelMenuFixed — never 100vw */
+  max-height: 220px;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-model-pick-menu .cpo-dd-item {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-model-fetch-btn {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+  color: #86868b !important;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-model-fetch-btn:hover {
+  color: #0071e3 !important;
+  border-color: rgba(0, 113, 227, 0.35) !important;
+  background: rgba(0, 113, 227, 0.06) !important;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-dd-empty {
+  padding: 10px 12px;
+  font-size: 12px;
+  color: #86868b;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-field-icon-btn {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0 !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: #86868b !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease, opacity 120ms ease, border-color 120ms ease;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-field-icon-btn:hover {
+  color: #0071e3 !important;
+  background: rgba(0, 113, 227, 0.08) !important;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-field-icon-btn:active {
+  background: rgba(0, 113, 227, 0.14) !important;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-field-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-field-icon-btn.is-loading .cpo-refresh-icon {
+  animation: cpo-spin 0.9s linear infinite;
+}
+[${PANEL_ATTR}].cpo-apple .cpo-refresh-icon,
+[${PANEL_ATTR}].cpo-apple .cpo-model-pick-btn .cpo-dd-caret {
+  display: block;
+  color: inherit;
 }
 
 [${PANEL_ATTR}].cpo-apple input,

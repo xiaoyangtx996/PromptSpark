@@ -131,7 +131,7 @@
 
   function syncButtonChrome(button, mount) {
     if (!(button instanceof HTMLElement)) return;
-    // Match peer icon buttons: no box, same row alignment
+    // Match peer icon buttons: no box, same row alignment; gap comes from parent
     button.style.cssText = [
       "display:inline-flex",
       "align-items:center",
@@ -139,7 +139,7 @@
       "width:24px",
       "height:24px",
       "min-width:24px",
-      "margin:0 2px 0 0",
+      "margin:0",
       "padding:0",
       "border:none",
       "background:transparent",
@@ -183,10 +183,10 @@
       "align-items:center",
       "justify-content:center",
       `height:${height}px`,
-      "min-width:36px",
+      "min-width:0",
       "width:auto",
-      "margin:0 4px 0 0",
-      "padding:0 8px",
+      "margin:0",
+      "padding:0 4px",
       "border:none",
       "background:transparent",
       "box-shadow:none",

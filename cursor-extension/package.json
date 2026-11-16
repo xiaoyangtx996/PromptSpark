@@ -1,15 +1,33 @@
 {
-  "name": "promptspark-proxy",
-  "displayName": "PromptSpark Proxy",
-  "description": "Starts the PromptSpark local LLM proxy when Cursor starts.",
-  "version": "1.3.6",
+  "name": "promptspark",
+  "displayName": "PromptSpark",
+  "description": "Cursor Composer 提示词优化与快捷命令；随扩展启动本机 LLM 代理。",
+  "version": "1.4.9",
   "publisher": "promptspark",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#0F1115",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.80.0"
   },
   "categories": ["Other"],
+  "keywords": ["cursor", "prompt", "composer", "llm"],
   "activationEvents": [
     "onStartupFinished"
   ],
-  "main": "./extension.js"
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "promptspark.reinject",
+        "title": "PromptSpark: 注入 Composer 控件"
+      },
+      {
+        "command": "promptspark.removeUi",
+        "title": "PromptSpark: 移除 Composer 控件"
+      }
+    ]
+  }
 }

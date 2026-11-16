@@ -11,7 +11,7 @@ const sourcePath = path.join(root, "src", "prompt-optimize.codex-source.js");
 const adaptersPath = path.join(root, "src", "host-adapters.js");
 const settingsDomPath = path.join(root, "src", "settings-dom.js");
 const outPath = path.join(root, "dist", "prompt-optimize.js");
-const VERSION = "1.3.6";
+const VERSION = "1.4.9";
 
 let src = fs.readFileSync(sourcePath, "utf8");
 let adapters = fs.readFileSync(adaptersPath, "utf8");
@@ -288,7 +288,7 @@ src = src.replace(
           });
         } catch (retryErr) {
           const err = new Error(
-          "本地代理未运行。请重启 Cursor/Codex，或运行: node ensure-proxy.mjs",
+          "本地代理未运行。请重启 Cursor，或运行: npm run ensure-proxy",
         );
           err.code = "CPO_PROXY_DOWN";
           err.cause = retryErr;
@@ -296,7 +296,7 @@ src = src.replace(
         }
       } else {
         const err = new Error(
-          "本地代理未运行。请重启 Cursor/Codex，或运行: node ensure-proxy.mjs",
+          "本地代理未运行。请重启 Cursor，或运行: npm run ensure-proxy",
         );
         err.code = "CPO_PROXY_DOWN";
         err.cause = error;
@@ -393,19 +393,22 @@ src = src.replace(
   }`,
 );
 
-// optimizePrompt: resolve system prompt from styles list
+// optimizePrompt: resolve system prompt from styles list + force plain-text rule
 src = src.replace(
   `async function optimizePrompt(userText, settings, signal) {
-    const system = settings.systemPrompts?.[settings.style] || DEFAULT_SYSTEM_PROMPTS[settings.style] || DEFAULT_SYSTEM_PROMPTS.structured;`,
+    const system = withPlainTextOutputRule(
+      settings.systemPrompts?.[settings.style] || DEFAULT_SYSTEM_PROMPTS[settings.style] || DEFAULT_SYSTEM_PROMPTS.structured,
+    );`,
   `async function optimizePrompt(userText, settings, signal) {
     const styleRow = Array.isArray(settings.styles)
       ? settings.styles.find((s) => s.id === settings.style)
       : null;
-    const system =
+    const system = withPlainTextOutputRule(
       (styleRow && styleRow.systemPrompt) ||
-      settings.systemPrompts?.[settings.style] ||
-      DEFAULT_SYSTEM_PROMPTS[settings.style] ||
-      DEFAULT_SYSTEM_PROMPTS.structured;`,
+        settings.systemPrompts?.[settings.style] ||
+        DEFAULT_SYSTEM_PROMPTS[settings.style] ||
+        DEFAULT_SYSTEM_PROMPTS.structured,
+    );`,
 );
 
 src = src.replace(

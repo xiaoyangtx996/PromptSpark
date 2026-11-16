@@ -2,7 +2,18 @@ import fs from "node:fs";
 
 const s = fs.readFileSync("dist/prompt-optimize.js", "utf8");
 const ok = {
-  v: /SCRIPT_VERSION = "1\.3\.6"/.test(s),
+  v: /SCRIPT_VERSION = "1\.4\.9"/.test(s),
+  brandIcon: s.includes("cpo-brand-icon") && s.includes("cpoBrandIcon"),
+  plainTextOut: s.includes("demoteMarkdownForPlainInput") && s.includes("no markdown wrapper around the whole answer"),
+  upstreamPrompts:
+    s.includes("fenced code blocks unchanged whenever possible") &&
+    s.includes("Prefer sections when helpful: Role, Goal, Context, Constraints, Output format, Edge cases.") &&
+    !s.includes("PLAIN_TEXT_OUTPUT_RULE"),
+  writeOnce: s.includes("writeViaPasteEvent") && s.includes("never rewrite for styling"),
+  writePaste: s.includes('method: "paste"') && s.includes("insertText collapses"),
+  writeLooksOk: s.includes("writeLooksSuccessful") && s.includes("ensurePlainSectionSpacing"),
+  noWriteRetryLoop: !/for \(let attempt = 0; attempt < 3/.test(s),
+  modelPick: s.includes("rebuildModelPickMenu") && s.includes("collectModelIds"),
   continueBtn: /CONTINUE_BUTTON_ATTR/.test(s) && /runContinueAndSend/.test(s),
   sendFix: /findCursorComposerSendButton/.test(s) && /isNotificationControl/.test(s),
   tabs: /cpo-main-tabs/.test(s) && /activeCommandId/.test(s),

@@ -73,6 +73,61 @@
     return svg;
   }
 
+  function cpoBrandIcon() {
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("class", "cpo-brand-icon");
+    svg.setAttribute("viewBox", "0 0 128 128");
+    svg.setAttribute("width", "28");
+    svg.setAttribute("height", "28");
+    svg.setAttribute("aria-hidden", "true");
+    const tile = document.createElementNS(svgNS, "rect");
+    tile.setAttribute("width", "128");
+    tile.setAttribute("height", "128");
+    tile.setAttribute("rx", "22");
+    tile.setAttribute("fill", "#0F1115");
+    const spark = document.createElementNS(svgNS, "path");
+    spark.setAttribute("d", "M64 20L78 52L110 66L78 80L64 112L50 80L18 66L50 52Z");
+    spark.setAttribute("fill", "#FFB000");
+    const core = document.createElementNS(svgNS, "path");
+    core.setAttribute("d", "M64 48L70 60L82 66L70 72L64 84L58 72L46 66L58 60Z");
+    core.setAttribute("fill", "#FFD678");
+    const mini = document.createElementNS(svgNS, "path");
+    mini.setAttribute("d", "M98 18L102 26L110 30L102 34L98 42L94 34L86 30L94 26Z");
+    mini.setAttribute("fill", "#FFB000");
+    svg.appendChild(tile);
+    svg.appendChild(spark);
+    svg.appendChild(core);
+    svg.appendChild(mini);
+    return svg;
+  }
+
+  function cpoRefreshIcon() {
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("class", "cpo-refresh-icon");
+    svg.setAttribute("viewBox", "0 0 16 16");
+    svg.setAttribute("width", "15");
+    svg.setAttribute("height", "15");
+    svg.setAttribute("aria-hidden", "true");
+    const arc = document.createElementNS(svgNS, "path");
+    arc.setAttribute("d", "M13.2 8A5.2 5.2 0 1 1 11.4 3.6");
+    arc.setAttribute("fill", "none");
+    arc.setAttribute("stroke", "currentColor");
+    arc.setAttribute("stroke-width", "1.6");
+    arc.setAttribute("stroke-linecap", "round");
+    const head = document.createElementNS(svgNS, "path");
+    head.setAttribute("d", "M11.1 1.6v3.2h3.2");
+    head.setAttribute("fill", "none");
+    head.setAttribute("stroke", "currentColor");
+    head.setAttribute("stroke-width", "1.6");
+    head.setAttribute("stroke-linecap", "round");
+    head.setAttribute("stroke-linejoin", "round");
+    svg.appendChild(arc);
+    svg.appendChild(head);
+    return svg;
+  }
+
   function newStyleId() {
     return `custom_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
   }
@@ -150,6 +205,36 @@
       spellcheck: "false",
       placeholder: "模型 ID",
     });
+    const modelFetchBtn = cpoEl("button", {
+      type: "button",
+      className: "cpo-field-icon-btn cpo-model-fetch-btn",
+      title: "拉取可用模型",
+      "aria-label": "拉取可用模型",
+    });
+    modelFetchBtn.appendChild(cpoRefreshIcon());
+    const modelPickTrigger = cpoEl("button", {
+      type: "button",
+      className: "cpo-field-icon-btn cpo-model-pick-btn",
+      title: "从已拉取列表选择",
+      "aria-label": "从已拉取列表选择",
+      "aria-haspopup": "listbox",
+      "aria-expanded": "false",
+    });
+    modelPickTrigger.appendChild(cpoCaret());
+    const modelPickMenu = cpoEl("div", {
+      className: "cpo-dd-menu cpo-model-pick-menu",
+      role: "listbox",
+      "aria-label": "模型列表",
+      hidden: "true",
+    });
+    // Combo owns the menu so the list spans the full Model input width (not the tiny caret).
+    const modelPickDd = cpoEl("div", { className: "cpo-dd cpo-model-combo" }, [
+      modelEl,
+      modelPickTrigger,
+      modelPickMenu,
+    ]);
+    let fetchedModelIds = [];
+    const modelRow = cpoEl("div", { className: "cpo-model-row" }, [modelPickDd, modelFetchBtn]);
     const warnEl = cpoEl("div", { className: "cpo-warn-banner", hidden: "true" });
 
     const segment = cpoEl("div", { className: "cpo-segment cpo-segment-sm", role: "tablist" });
@@ -255,12 +340,44 @@
       hidden: "true",
     });
 
+    function clearModelMenuFixed(menu) {
+      if (!(menu instanceof HTMLElement)) return;
+      for (const prop of ["position", "left", "top", "width", "max-width", "right", "z-index"]) {
+        menu.style.removeProperty(prop);
+      }
+    }
+
+    function placeModelMenuFixed(menu, anchor) {
+      if (!(menu instanceof HTMLElement) || !(anchor instanceof HTMLElement)) return;
+      const rect = anchor.getBoundingClientRect();
+      const width = Math.round(Math.min(Math.max(rect.width, 160), Math.min(rect.width, window.innerWidth - 16)));
+      let left = Math.round(rect.left);
+      const maxLeft = Math.max(8, window.innerWidth - width - 8);
+      if (left > maxLeft) left = maxLeft;
+      if (left < 8) left = 8;
+      let top = Math.round(rect.bottom + 4);
+      if (top + 160 > window.innerHeight - 8) {
+        top = Math.max(8, Math.round(rect.top - 4 - Math.min(220, rect.top - 8)));
+      }
+      // !important — CSS must not force width:100% of the viewport when position:fixed
+      menu.style.setProperty("position", "fixed", "important");
+      menu.style.setProperty("left", `${left}px`, "important");
+      menu.style.setProperty("top", `${top}px`, "important");
+      menu.style.setProperty("width", `${width}px`, "important");
+      menu.style.setProperty("max-width", `${width}px`, "important");
+      menu.style.setProperty("right", "auto", "important");
+      menu.style.setProperty("z-index", "2147483000", "important");
+    }
+
     function closeAllMenus(except) {
-      for (const dd of [protocolDd, styleDd, commandDd]) {
+      for (const dd of [protocolDd, styleDd, commandDd, modelPickDd]) {
         if (except && dd === except) continue;
         const menu = dd.querySelector(".cpo-dd-menu");
-        const trigger = dd.querySelector(".cpo-dd-trigger");
-        if (menu) menu.hidden = true;
+        const trigger = dd.querySelector(".cpo-dd-trigger, .cpo-model-pick-btn");
+        if (menu) {
+          menu.hidden = true;
+          if (dd === modelPickDd) clearModelMenuFixed(menu);
+        }
         if (trigger) trigger.setAttribute("aria-expanded", "false");
         dd.classList.remove("is-open");
       }
@@ -268,13 +385,48 @@
 
     function toggleMenu(dd) {
       const menu = dd.querySelector(".cpo-dd-menu");
-      const trigger = dd.querySelector(".cpo-dd-trigger");
+      const trigger = dd.querySelector(".cpo-dd-trigger, .cpo-model-pick-btn");
       const willOpen = !!(menu && menu.hidden);
       closeAllMenus(willOpen ? dd : null);
       if (!menu || !trigger) return;
       menu.hidden = !willOpen;
       trigger.setAttribute("aria-expanded", willOpen ? "true" : "false");
       dd.classList.toggle("is-open", willOpen);
+      if (dd === modelPickDd) {
+        if (willOpen) placeModelMenuFixed(menu, modelPickDd);
+        else clearModelMenuFixed(menu);
+      }
+    }
+
+    function rebuildModelPickMenu(ids, { open = false } = {}) {
+      fetchedModelIds = Array.isArray(ids) ? ids.slice() : [];
+      modelPickMenu.replaceChildren();
+      if (!fetchedModelIds.length) {
+        modelPickMenu.appendChild(
+          cpoEl("div", { className: "cpo-dd-empty", text: "先点右侧刷新拉取模型" }),
+        );
+      } else {
+        const current = modelEl.value.trim();
+        for (const id of fetchedModelIds) {
+          const btn = cpoEl("button", {
+            type: "button",
+            className: "cpo-dd-item",
+            role: "option",
+            "data-value": id,
+            text: id,
+          });
+          if (id === current) btn.setAttribute("aria-selected", "true");
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            modelEl.value = id;
+            updateMismatchWarn();
+            closeAllMenus();
+          });
+          modelPickMenu.appendChild(btn);
+        }
+      }
+      if (open) toggleMenu(modelPickDd);
     }
 
     function updateMismatchWarn() {
@@ -636,7 +788,7 @@
         cpoEl("label", { className: "cpo-field cpo-span2" }, [cpoEl("span", { text: "协议" }), protocolDd]),
         cpoEl("label", { className: "cpo-field cpo-span2" }, [cpoEl("span", { text: "Base URL" }), baseUrlEl]),
         cpoEl("label", { className: "cpo-field" }, [cpoEl("span", { text: "API Key" }), apiKeyEl]),
-        cpoEl("label", { className: "cpo-field" }, [cpoEl("span", { text: "Model" }), modelEl]),
+        cpoEl("label", { className: "cpo-field" }, [cpoEl("span", { text: "Model" }), modelRow]),
       ]),
       warnEl,
       cpoEl("p", {
@@ -653,6 +805,61 @@
     modelEl.addEventListener("input", updateMismatchWarn);
     baseUrlEl.addEventListener("input", updateMismatchWarn);
     updateMismatchWarn();
+
+    rebuildModelPickMenu([]);
+    modelPickTrigger.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!fetchedModelIds.length) {
+        showToast("请先点刷新拉取模型", "warn");
+        return;
+      }
+      toggleMenu(modelPickDd);
+    });
+
+    let modelFetchBusy = false;
+    modelFetchBtn.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (modelFetchBusy) return;
+      const baseUrl = baseUrlEl.value.trim();
+      const apiKey = apiKeyEl.value.trim();
+      if (!baseUrl) {
+        showToast("请先填写 Base URL", "warn");
+        return;
+      }
+      if (!apiKey) {
+        showToast("请先填写 API Key", "warn");
+        return;
+      }
+      modelFetchBusy = true;
+      modelFetchBtn.classList.add("is-loading");
+      modelFetchBtn.disabled = true;
+      try {
+        const ids = await listRemoteModels({
+          protocol: protocolValue,
+          baseUrl,
+          apiKey,
+        });
+        if (!ids.length) {
+          rebuildModelPickMenu([]);
+          showToast("未获取到模型列表（检查 Base URL / Key / 协议）", "warn");
+        } else {
+          if (!modelEl.value.trim() || !ids.includes(modelEl.value.trim())) {
+            modelEl.value = ids[0];
+            updateMismatchWarn();
+          }
+          rebuildModelPickMenu(ids, { open: true });
+          showToast(`已拉取 ${ids.length} 个模型`, "ok");
+        }
+      } catch (error) {
+        showToast(collapseWs(error?.message || "拉取模型失败").slice(0, 160), "error");
+      } finally {
+        modelFetchBusy = false;
+        modelFetchBtn.classList.remove("is-loading");
+        modelFetchBtn.disabled = false;
+      }
+    });
     rebuildStyleUi();
     rebuildCommandUi();
     setMainTab("styles");
@@ -678,9 +885,12 @@
 
     const card = cpoEl("div", { className: "cpo-card", role: "dialog", "aria-modal": "true", "aria-label": "PromptSpark" }, [
       cpoEl("header", { className: "cpo-sheet-head" }, [
-        cpoEl("div", null, [
-          cpoEl("h2", { text: "PromptSpark" }),
-          cpoEl("p", { className: "cpo-sub", text: "优化 · 快捷命令 · Alt+点击打开设置" }),
+        cpoEl("div", { className: "cpo-brand" }, [
+          cpoBrandIcon(),
+          cpoEl("div", { className: "cpo-brand-copy" }, [
+            cpoEl("h2", { text: "PromptSpark" }),
+            cpoEl("p", { className: "cpo-sub", text: "优化 · 快捷命令 · Alt+点击打开设置" }),
+          ]),
         ]),
         cpoEl("button", { type: "button", className: "cpo-close", "data-cpo-action": "close", text: "关闭" }),
       ]),

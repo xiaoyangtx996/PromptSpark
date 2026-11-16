@@ -1,137 +1,196 @@
 /**
- * PromptSpark proxy booster — runs in Cursor's Extension Host (Node).
- * Starts the local LLM proxy alongside Cursor; no shortcut wrapping required.
+ * PromptSpark — Cursor extension
+ * - Starts local LLM proxy in-process
+ * - Injects Composer UI script into workbench.html (first run / upgrade)
  */
-const cp = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
-const http = require("node:http");
+const crypto = require("node:crypto");
+const vscode = require("vscode");
+const { startProxy, stopProxy } = require("./proxy-server.cjs");
 
-const PORT = Number(process.env.CPO_PROXY_PORT || 37841);
+const PATCH_BEGIN = "<!-- PROMPTSPARK-PATCH -->";
+const PATCH_END = "<!-- /PROMPTSPARK-PATCH -->";
+const LEGACY_PATCH_BEGIN = "<!-- PROMPT-OPTIMIZE-PATCH -->";
+const LEGACY_PATCH_END = "<!-- /PROMPT-OPTIMIZE-PATCH -->";
+const PATCH_ASSET = "promptspark.js";
 
-function loadConfig() {
-  const cfgPath = path.join(__dirname, "proxy-config.json");
-  try {
-    return JSON.parse(fs.readFileSync(cfgPath, "utf8"));
-  } catch {
-    return {};
-  }
+function vscodeChecksum(content) {
+  return crypto.createHash("sha256").update(content, "utf8").digest("base64").replace(/=+$/, "");
 }
 
-function looksLikeNode(bin) {
-  const base = path.basename(String(bin || "")).toLowerCase();
-  return base === "node" || base === "node.exe";
+function resolveWorkbench(appRoot) {
+  if (!appRoot) return { workbench: null, productJson: null, checksumKey: null };
+  const candidates = [
+    path.join(appRoot, "resources", "app", "out", "vs", "code", "electron-sandbox", "workbench", "workbench.html"),
+    path.join(appRoot, "resources", "app", "out", "vs", "code", "electron-browser", "workbench", "workbench.html"),
+  ];
+  const workbench = candidates.find((p) => fs.existsSync(p)) || null;
+  const productJson = [
+    path.join(appRoot, "resources", "app", "product.json"),
+  ].find((p) => fs.existsSync(p)) || null;
+  let checksumKey = null;
+  if (workbench?.includes("electron-sandbox")) {
+    checksumKey = "vs/code/electron-sandbox/workbench/workbench.html";
+  } else if (workbench?.includes("electron-browser")) {
+    checksumKey = "vs/code/electron-browser/workbench/workbench.html";
+  }
+  return { workbench, productJson, checksumKey };
 }
 
-function resolveNodePath(config) {
-  if (config.node && looksLikeNode(config.node) && fs.existsSync(config.node)) {
-    return config.node;
+function findCursorAppRoot() {
+  // Extension Host runs under Cursor.exe
+  const exeDir = path.dirname(process.execPath);
+  if (fs.existsSync(path.join(exeDir, "resources", "app"))) return exeDir;
+  // Fallback: common install dirs
+  const home = process.env.LOCALAPPDATA || "";
+  const extras = [
+    path.join(home, "Programs", "cursor"),
+    path.join(home, "cursor"),
+    "C:\\Program Files\\Cursor",
+  ];
+  for (const root of extras) {
+    if (fs.existsSync(path.join(root, "resources", "app"))) return root;
   }
-  if (looksLikeNode(process.execPath) && fs.existsSync(process.execPath)) {
-    return process.execPath;
-  }
-  try {
-    const out = cp.execFileSync(process.platform === "win32" ? "where" : "which", ["node"], {
-      encoding: "utf8",
-      windowsHide: true,
-    });
-    const first = String(out).split(/\r?\n/).map((s) => s.trim()).find(Boolean);
-    if (first && fs.existsSync(first) && looksLikeNode(first)) return first;
-  } catch {
-    /* ignore */
-  }
-  const helper = path.join(
-    path.dirname(process.execPath),
-    "resources",
-    "app",
-    "resources",
-    "helpers",
-    process.platform === "win32" ? "node.exe" : "node",
-  );
-  if (fs.existsSync(helper)) return helper;
   return null;
 }
 
-function proxyHealthy(timeoutMs = 600) {
-  return new Promise((resolve) => {
-    const req = http.get(
-      { host: "127.0.0.1", port: PORT, path: "/health", timeout: timeoutMs },
-      (res) => {
-        res.resume();
-        resolve(res.statusCode >= 200 && res.statusCode < 300);
-      },
+function stripPatches(html) {
+  let out = html;
+  for (const [begin, end] of [
+    [PATCH_BEGIN, PATCH_END],
+    [LEGACY_PATCH_BEGIN, LEGACY_PATCH_END],
+  ]) {
+    const re = new RegExp(
+      `${begin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s\\S]*?${end.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\n?`,
+      "g",
     );
-    req.on("error", () => resolve(false));
-    req.on("timeout", () => {
-      req.destroy();
-      resolve(false);
-    });
-  });
+    out = out.replace(re, "");
+  }
+  return out;
 }
 
-function spawnEnsure(config) {
-  const nodePath = resolveNodePath(config);
-  if (!nodePath) {
-    console.warn("[PromptSpark] Node.js not found; cannot start local proxy");
-    return false;
+function updateProductChecksum(productJsonPath, checksumKey, workbenchPath) {
+  if (!productJsonPath || !checksumKey || !fs.existsSync(productJsonPath)) return false;
+  const json = JSON.parse(fs.readFileSync(productJsonPath, "utf8"));
+  if (!json.checksums || typeof json.checksums !== "object") return false;
+  const sum = vscodeChecksum(fs.readFileSync(workbenchPath, "utf8"));
+  const keys = [
+    checksumKey,
+    "vs/code/electron-sandbox/workbench/workbench.html",
+    "vs/code/electron-browser/workbench/workbench.html",
+  ];
+  let updated = false;
+  for (const key of keys) {
+    if (key in json.checksums) {
+      json.checksums[key] = sum;
+      updated = true;
+    }
   }
-  const ensureProxy =
-    config.ensureProxy ||
-    path.join(process.env.LOCALAPPDATA || "", "PromptSpark", "ensure-proxy.mjs");
-  const fallbackEnsure = path.join(
-    process.env.LOCALAPPDATA || "",
-    "PromptSpark",
-    "cursor",
-    "ensure-proxy.mjs",
-  );
-  const ensurePath = fs.existsSync(ensureProxy)
-    ? ensureProxy
-    : fs.existsSync(fallbackEnsure)
-      ? fallbackEnsure
-      : null;
-  if (!ensurePath) {
-    console.warn("[PromptSpark] ensure-proxy.mjs missing");
-    return false;
-  }
-  const proxyJs =
-    config.proxy ||
-    (fs.existsSync(path.join(path.dirname(ensurePath), "proxy.mjs"))
-      ? path.join(path.dirname(ensurePath), "proxy.mjs")
-      : path.join(process.env.LOCALAPPDATA || "", "PromptSpark", "proxy.mjs"));
-  const child = cp.spawn(nodePath, [ensurePath], {
-    cwd: path.dirname(ensurePath),
-    detached: true,
-    stdio: "ignore",
-    windowsHide: true,
-    env: {
-      ...process.env,
-      PROMPTSPARK_PROXY_JS: proxyJs,
-    },
-  });
-  child.unref();
+  if (!updated) return false;
+  fs.writeFileSync(productJsonPath, JSON.stringify(json, null, "\t") + "\n", "utf8");
   return true;
 }
 
-async function ensureProxy(config) {
-  if (await proxyHealthy()) return true;
-  if (!spawnEnsure(config)) return false;
-  for (let i = 0; i < 20; i++) {
-    await new Promise((r) => setTimeout(r, 150));
-    if (await proxyHealthy()) return true;
+/**
+ * @returns {"injected"|"updated"|"unchanged"|"missing-script"|"missing-workbench"|"write-failed"}
+ */
+function ensureWorkbenchInject(extensionPath, { force = false } = {}) {
+  const scriptSrc = path.join(extensionPath, PATCH_ASSET);
+  if (!fs.existsSync(scriptSrc)) return "missing-script";
+
+  const appRoot = findCursorAppRoot();
+  const { workbench, productJson, checksumKey } = resolveWorkbench(appRoot);
+  if (!workbench) return "missing-workbench";
+
+  const assetPath = path.join(path.dirname(workbench), PATCH_ASSET);
+  const scriptBody = fs.readFileSync(scriptSrc, "utf8");
+  let html = fs.readFileSync(workbench, "utf8");
+  const already = html.includes(PATCH_BEGIN) && fs.existsSync(assetPath);
+  const sameScript = already && fs.readFileSync(assetPath, "utf8") === scriptBody;
+
+  if (already && sameScript && !force) return "unchanged";
+
+  try {
+    html = stripPatches(html);
+    fs.writeFileSync(assetPath, scriptBody, "utf8");
+    const patch = `\n${PATCH_BEGIN}\n<script src="./${PATCH_ASSET}"></script>\n${PATCH_END}\n`;
+    if (/<\/html>\s*$/i.test(html)) {
+      html = html.replace(/<\/html>\s*$/i, `${patch}</html>\n`);
+    } else {
+      html += patch;
+    }
+    fs.writeFileSync(workbench, html, "utf8");
+    updateProductChecksum(productJson, checksumKey, workbench);
+    return already ? "updated" : "injected";
+  } catch (error) {
+    console.warn("[PromptSpark] workbench inject failed", error?.message || error);
+    return "write-failed";
   }
-  return false;
 }
 
-function activate() {
-  const config = loadConfig();
-  ensureProxy(config).then((ok) => {
-    if (ok) console.info("[PromptSpark] local proxy ready on 127.0.0.1:" + PORT);
-    else console.warn("[PromptSpark] failed to start local proxy");
-  }).catch((error) => {
-    console.warn("[PromptSpark] proxy bootstrap error", error?.message || error);
-  });
+function removeWorkbenchInject() {
+  const appRoot = findCursorAppRoot();
+  const { workbench, productJson, checksumKey } = resolveWorkbench(appRoot);
+  if (!workbench) return false;
+  try {
+    let html = stripPatches(fs.readFileSync(workbench, "utf8"));
+    fs.writeFileSync(workbench, html, "utf8");
+    fs.rmSync(path.join(path.dirname(workbench), PATCH_ASSET), { force: true });
+    updateProductChecksum(productJson, checksumKey, workbench);
+    return true;
+  } catch (error) {
+    console.warn("[PromptSpark] workbench remove failed", error?.message || error);
+    return false;
+  }
 }
 
-function deactivate() {}
+async function activate(context) {
+  const status = await startProxy();
+  if (status === "failed") {
+    console.warn("[PromptSpark] proxy failed to start");
+  }
+
+  const inject = ensureWorkbenchInject(context.extensionPath);
+  if (inject === "injected" || inject === "updated") {
+    const pick = await vscode.window.showInformationMessage(
+      "PromptSpark 已写入 Composer 控件，请完全退出并重新打开 Cursor 后生效。",
+      "我知道了",
+    );
+    void pick;
+  } else if (inject === "write-failed") {
+    vscode.window.showWarningMessage(
+      "PromptSpark 无法写入 workbench（可能需要管理员权限）。可尝试以管理员运行 Cursor，或执行命令「PromptSpark: 注入 Composer 控件」。",
+    );
+  } else if (inject === "missing-script") {
+    console.warn("[PromptSpark] bundled promptspark.js missing");
+  } else if (inject === "missing-workbench") {
+    console.warn("[PromptSpark] Cursor workbench.html not found");
+  }
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("promptspark.reinject", async () => {
+      const r = ensureWorkbenchInject(context.extensionPath, { force: true });
+      if (r === "injected" || r === "updated" || r === "unchanged") {
+        vscode.window.showInformationMessage("已注入。请完全退出并重新打开 Cursor。");
+      } else if (r === "write-failed") {
+        vscode.window.showErrorMessage("写入失败：请以管理员身份运行 Cursor 后再试。");
+      } else {
+        vscode.window.showErrorMessage(`注入失败：${r}`);
+      }
+    }),
+    vscode.commands.registerCommand("promptspark.removeUi", async () => {
+      if (removeWorkbenchInject()) {
+        vscode.window.showInformationMessage("已移除 Composer 控件。请完全退出并重新打开 Cursor。");
+      } else {
+        vscode.window.showErrorMessage("移除失败。");
+      }
+    }),
+  );
+}
+
+function deactivate() {
+  stopProxy();
+}
 
 module.exports = { activate, deactivate };
