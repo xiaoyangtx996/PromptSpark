@@ -12,11 +12,54 @@
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-4C8DFF.svg?style=flat-square" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Cursor-111315.svg?style=flat-square" alt="Windows Cursor">
   <img src="https://img.shields.io/badge/install-VSIX-FFB000.svg?style=flat-square" alt="Install via VSIX">
+  <a href="https://open-vsx.org/extension/xiaoyangtx996/promptspark"><img src="https://img.shields.io/badge/Open%20VSX-promptspark-purple.svg?style=flat-square" alt="Open VSX"></a>
 </p>
 
 **PromptSpark** 面向 Cursor（Windows）：在 Composer 旁加入「闪光」提示词优化/还原，以及可切换的快捷命令（左键发送、右键切换）。
 
 > 仅支持 **Cursor · Windows**。Codex 桌面请用 [Codex++](https://github.com/xiaoyangtx996/CodexPlusPlus)。
+
+## 界面预览
+
+### Composer 控件
+
+闪光（优化/还原）与「继续」快捷命令，嵌在 Composer 输入区旁：
+
+<p align="center">
+  <img src="./assets/readme/toolbar.png" width="720" alt="Composer 旁的继续按钮与闪光优化">
+</p>
+
+### 设置 · 提示词优化
+
+默认风格分段、自定义风格、System prompt；说明在「？」上悬停：
+
+<p align="center">
+  <img src="./assets/readme/settings-styles.png" width="520" alt="设置面板 · 提示词优化">
+</p>
+
+### 设置 · 快捷命令
+
+标题显示在 Composer 按钮上；内容为点击后填入并自动发送的文本：
+
+<p align="center">
+  <img src="./assets/readme/settings-commands.png" width="520" alt="设置面板 · 快捷命令">
+</p>
+
+### 设置 · 模型配置
+
+OpenAI 兼容 / Anthropic、Base URL、API Key、Model：
+
+<p align="center">
+  <img src="./assets/readme/settings-model.png" width="520" alt="设置面板 · 模型配置">
+</p>
+
+### 未保存确认
+
+有改动时关闭会二次确认；未改动直接关，不会误报：
+
+<p align="center">
+  <img src="./assets/readme/settings-confirm.png" width="520" alt="放弃未保存更改确认框">
+</p>
 
 ## 能做什么
 
@@ -36,6 +79,16 @@
   <img src="./assets/readme/workflow.svg" width="100%" alt="拖入 VSIX、完全重启 Cursor、在 Composer 中使用">
 </p>
 
+**方式 A · 扩展市场（推荐）**
+
+1. Cursor → Extensions，搜索 **PromptSpark**（publisher: `xiaoyangtx996`）并安装  
+2. 也可在 [Open VSX](https://open-vsx.org/extension/xiaoyangtx996/promptspark) / [VS Marketplace](https://marketplace.visualstudio.com/items?itemName=xiaoyangtx996.promptspark) 打开安装  
+3. 若提示已写入 Composer 控件 → **完全退出并重新打开 Cursor**（不要只 Reload Window）
+
+> Open VSX 新发布可能处于 **Under review**，过审前请用下方 VSIX / Release。
+
+**方式 B · VSIX / Release**
+
 1. 下载 [Releases](https://github.com/xiaoyangtx996/PromptSpark/releases) 中的 `PromptSpark-*.vsix`  
    或本地打包：
 
@@ -47,8 +100,7 @@ npm run pack:vsix
 （本地打包会把仓库版本 **+1**；正式发版以 GitHub 最新 tag **+1** 为准。）
 
 2. 将 `.vsix` **拖进 Cursor**，或：扩展 → `…` → **Install from VSIX…**
-3. 若提示已写入 Composer 控件 → **完全退出并重新打开 Cursor**（不要只 Reload Window）
-4. 扩展显示名：**PromptSpark**（publisher: `xiaoyangtx996`）
+3. 若提示已写入 Composer 控件 → **完全退出并重新打开 Cursor**
 
 写入失败时：以管理员运行 Cursor，命令面板执行 `PromptSpark: 注入 Composer 控件`。
 
@@ -70,19 +122,21 @@ npm run pack:vsix
 
 ```text
 src/                 Composer UI 源码（闪光 / 继续 / 设置面板）
-cursor-extension/    Cursor 扩展入口、本机代理、扩展图标
+cursor-extension/    Cursor 扩展入口、本机代理、扩展图标与市场 README
 runtime/             命令行安装器用的独立代理
-scripts/             打包 / 发版 / 品牌图处理 / 校验
+scripts/             打包 / 发版 / 截图 / 品牌图 / 校验
 assets/brand/        Logo（字标、图标、源图；透明底）
-assets/readme/       README 插图
+assets/readme/       README 插图与界面截图
 dist/                本地构建产物（gitignore；含 .vsix）
 ```
 
 ```powershell
-npm run build       # UI 脚本 → dist/prompt-optimize.js
-npm run pack:vsix   # 仓库版本 +1，产出 VSIX（联调拖装）
-npm run verify      # 构建 + 结构校验
-npm run release     # 线上 tag +1 → 打包 → 创建/更新 GitHub Release
+npm run build                # UI 脚本 → dist/prompt-optimize.js
+npm run pack:vsix            # 仓库版本 +1，产出 VSIX（联调拖装）
+npm run verify               # 构建 + 结构校验
+npm run release              # 线上 tag +1 → 打包 → 创建/更新 GitHub Release
+npm run publish:marketplace  # 发布到 Open VSX / VS Marketplace（需 OVSX_PAT / VSCE_PAT）
+npm run shots:readme         # 重新生成 assets/readme 界面截图
 ```
 
 品牌图透明底：

@@ -44,7 +44,14 @@ if (!fs.existsSync(iconPng)) throw new Error("cursor-extension/media/icon.png mi
 rimraf(STAGE);
 fs.mkdirSync(STAGE, { recursive: true });
 
-const files = ["package.json", "extension.js", "proxy-server.cjs", ".vscodeignore"];
+const files = [
+  "package.json",
+  "extension.js",
+  "proxy-server.cjs",
+  ".vscodeignore",
+  "README.md",
+  "CHANGELOG.md",
+];
 for (const name of files) {
   const srcPath = path.join(EXT_SRC, name);
   if (!fs.existsSync(srcPath)) continue;
@@ -53,6 +60,7 @@ for (const name of files) {
 copyFile(script, path.join(STAGE, "promptspark.js"));
 const licenseSrc = path.join(ROOT, "LICENSE");
 if (fs.existsSync(licenseSrc)) {
+  // vsce accepts LICENSE; do not also copy LICENSE.txt (Windows case-fold conflict).
   copyFile(licenseSrc, path.join(STAGE, "LICENSE"));
 }
 // Brand icon for Extensions view

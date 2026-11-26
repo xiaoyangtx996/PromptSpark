@@ -18,3 +18,7 @@ scripts/tmp-*.py
 scripts/_patch-*.mjs
 __pycache__/
 *.pyc
+
+.ovsx-token
+.vsce-pat
+

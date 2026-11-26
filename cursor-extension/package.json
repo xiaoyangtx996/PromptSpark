@@ -22,13 +22,18 @@
     "vscode": "^1.80.0"
   },
   "categories": [
+    "Machine Learning",
     "Other"
   ],
   "keywords": [
     "cursor",
     "prompt",
     "composer",
-    "llm"
+    "llm",
+    "openai",
+    "anthropic",
+    "prompt optimize",
+    "promptspark"
   ],
   "activationEvents": [
     "onStartupFinished"
