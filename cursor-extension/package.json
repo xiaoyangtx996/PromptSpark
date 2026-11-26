@@ -2,7 +2,7 @@
   "name": "promptspark",
   "displayName": "PromptSpark",
   "description": "Cursor Composer 提示词优化与快捷命令；随扩展启动本机 LLM 代理。",
-  "version": "1.4.11",
+  "version": "1.4.12",
   "publisher": "xiaoyangtx996",
   "icon": "media/icon.png",
   "galleryBanner": {

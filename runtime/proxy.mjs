@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.CPO_PROXY_PORT || 37841);
 const HOST = "127.0.0.1";
-const VERSION = "1.4.11";
+const VERSION = "1.4.12";
 const PID_FILE = path.join(__dirname, ".proxy.pid");
 const SETTINGS_FILE =
   process.env.CPO_SETTINGS_PATH ||

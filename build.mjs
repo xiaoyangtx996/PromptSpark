@@ -11,7 +11,7 @@ const sourcePath = path.join(root, "src", "prompt-optimize.codex-source.js");
 const adaptersPath = path.join(root, "src", "host-adapters.js");
 const settingsDomPath = path.join(root, "src", "settings-dom.js");
 const outPath = path.join(root, "dist", "prompt-optimize.js");
-const VERSION = "1.4.11";
+const VERSION = "1.4.12";
 
 let src = fs.readFileSync(sourcePath, "utf8");
 let adapters = fs.readFileSync(adaptersPath, "utf8");

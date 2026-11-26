@@ -9,7 +9,7 @@ const path = require("node:path");
 
 const PORT = Number(process.env.CPO_PROXY_PORT || 37841);
 const HOST = "127.0.0.1";
-const VERSION = "1.4.11";
+const VERSION = "1.4.12";
 
 function resolveSettingsPath() {
   if (process.env.CPO_SETTINGS_PATH) return process.env.CPO_SETTINGS_PATH;
