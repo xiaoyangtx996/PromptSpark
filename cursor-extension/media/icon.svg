@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="PromptSpark">
-  <rect width="128" height="128" fill="#0F1115"/>
-  <path fill="#FFB30A" d="M64 22 L79 51 L108 66 L79 81 L64 110 L49 81 L20 66 L49 51 Z"/>
-  <path fill="#FFDC8C" d="M64 50 L70 60 L80 66 L70 72 L64 82 L58 72 L48 66 L58 60 Z"/>
-  <path fill="#FFB30A" d="M100 17 L104 24 L111 28 L104 32 L100 39 L96 32 L89 28 L96 24 Z"/>
-</svg>

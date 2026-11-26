@@ -2,7 +2,7 @@ import fs from "node:fs";
 
 const s = fs.readFileSync("dist/prompt-optimize.js", "utf8");
 const ok = {
-  v: /SCRIPT_VERSION = "1\.4\.10"/.test(s),
+  v: /SCRIPT_VERSION = "1\.4\.11"/.test(s),
   brandIcon: s.includes("cpo-brand-icon") && s.includes("cpoBrandIcon"),
   plainTextOut: s.includes("demoteMarkdownForPlainInput") && s.includes("no markdown wrapper around the whole answer"),
   upstreamPrompts:
@@ -15,7 +15,10 @@ const ok = {
   writeOnce: s.includes("writeViaPasteEvent") && s.includes("never rewrite for styling"),
   writePaste: s.includes('method: "paste"') && s.includes("insertText collapses"),
   writeLooksOk: s.includes("writeLooksSuccessful") && s.includes("ensurePlainSectionSpacing"),
-  proxyCopy: s.includes("127.0.0.1:37841") && s.includes("扩展本机代理"),
+  proxyCopy: s.includes("127.0.0.1:37841"),
+  diskPersist: s.includes("pullSettingsFromDisk") && s.includes("pushSettingsToDisk") && s.includes("/settings"),
+  modelIds: s.includes("modelIds"),
+  lockedPromptRuntime: s.includes('["concise", "structured", "coding"].includes(settings.style)'),
   noWriteRetryLoop: !/for \(let attempt = 0; attempt < 3/.test(s),
   modelPick: s.includes("rebuildModelPickMenu") && s.includes("collectModelIds"),
   continueBtn: /CONTINUE_BUTTON_ATTR/.test(s) && /runContinueAndSend/.test(s),
@@ -32,7 +35,7 @@ const ok = {
   paste: s.includes("writeViaPasteEvent") && s.includes("copyTextFallback"),
   noScroll: s.includes("scrollbar-width: none"),
   autoProto: s.includes("已自动改为 OpenAI 兼容协议"),
-  noWhiteOverlay: s.includes("prefers-reduced-transparency") && s.includes("rgba(0, 0, 0, 0.5)"),
+  noWhiteOverlay: s.includes("prefers-reduced-transparency") && s.includes("background: transparent !important"),
   noDeadFinders: !s.includes("findStructuralContextGroup") && !s.includes("findBestModelControl"),
   noOrphanCss: !s.includes(".cpo-grid") && !s.includes("cpo-channel-hint") && !s.includes("cpo-linkish"),
   commandDd: s.includes("cpo-command-dd") && s.includes("＋ 新增命令") && !s.includes("cpo-cmd-list"),

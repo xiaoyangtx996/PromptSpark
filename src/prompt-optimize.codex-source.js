@@ -1914,6 +1914,10 @@ author: Codex++ Community
 
   async function runContinueAndSend() {
     if (runtime.continueBusy) return;
+    if (runtime.loading) {
+      showToast("正在优化提示词，请稍后再点快捷命令", "warn");
+      return;
+    }
     const cont = document.querySelector(`[${CONTINUE_BUTTON_ATTR}]`);
     runtime.continueBusy = true;
     if (cont instanceof HTMLElement) cont.dataset.busy = "1";
@@ -2669,10 +2673,19 @@ author: Codex++ Community
       showToast("当前 Codex++ 不提供可用的 LLM 请求通道", "error");
       return;
     }
+    if (runtime.continueBusy) {
+      showToast("快捷命令发送中，请稍后再优化", "warn");
+      return;
+    }
+    try {
+      if (typeof pullSettingsFromDisk === "function") await pullSettingsFromDisk();
+    } catch (_) {
+      /* ignore */
+    }
     const settings = loadSettings();
     if (!isConfigured(settings)) {
       showToast("请先配置 API", "warn");
-      openSettingsPanel();
+      openSettingsPanel({ tab: "model" });
       return;
     }
     const input = findComposerInput();
@@ -2719,7 +2732,7 @@ author: Codex++ Community
         state.originalText = original;
         state.optimizedText = normalizeText(readComposerText(input)) || optimized;
         state.mode = "optimized";
-        showToast(`已优化 v${SCRIPT_VERSION}，再次点击可还原`, "ok");
+        showToast("已优化，再次点击可还原", "ok");
       }
     } catch (error) {
       if (cancelReason === "user") {
@@ -2793,167 +2806,9 @@ author: Codex++ Community
     closeContinueCommandMenu();
   }
 
+  // Stub only — build.mjs replaces this whole function with settings-dom (openSettingsPanelDomSafe).
   function openSettingsPanel() {
-    closeSettingsPanel();
-    const settings = loadSettings();
-    const overlay = document.createElement("div");
-    overlay.setAttribute(PANEL_ATTR, "true");
-    overlay.innerHTML = `
-      <div class="cpo-card" role="dialog" aria-modal="true" aria-label="Prompt Optimize 设置">
-        <h2>Prompt Optimize 设置</h2>
-        <p class="cpo-sub">配置外部 LLM。请求优先由 Codex++ LLM Bridge 代发，并兼容当前发行版的 Electron 原生请求通道；无需 sidecar 或本地代理。右键 ✨ 可再次打开本面板。</p>
-        <div class="cpo-grid">
-          <label>协议
-            <select data-cpo="protocol">
-              <option value="openai">OpenAI 兼容 (Chat Completions)</option>
-              <option value="anthropic">Anthropic (Messages)</option>
-            </select>
-          </label>
-          <label>Base URL（HTTPS）
-            <input data-cpo="baseUrl" type="url" spellcheck="false" placeholder="https://api.example.com/v1" />
-          </label>
-          <div class="cpo-prompt-block">
-            <div class="cpo-prompt-head"><span>请求通道</span></div>
-            <div style="font-size:12px;line-height:1.45;color:#d4d4d8;">
-              ${hasCodexPlusBridge() && hasElectronFetchBridge()
-                ? "已检测到请求桥接与 Electron 原生通道；优先 /llm-proxy，不支持时自动兼容。本机代理 127.0.0.1:37841。"
-                : hasCodexPlusBridge()
-                  ? "已检测到请求桥接。本机代理 127.0.0.1:37841。"
-                  : hasElectronFetchBridge()
-                    ? "已检测到 Electron 原生请求通道。本机代理 127.0.0.1:37841。"
-                    : "将使用扩展本机代理 127.0.0.1:37841（需 PromptSpark 扩展已启动）。"}
-            </div>
-          </div>
-          <label>API Key
-            <input data-cpo="apiKey" type="password" spellcheck="false" autocomplete="new-password" placeholder="sk-..." />
-          </label>
-          <label>Model
-            <input data-cpo="model" type="text" spellcheck="false" placeholder="gpt-4o-mini" />
-          </label>
-          <label>优化风格
-            <select data-cpo="style">
-              <option value="concise">简洁</option>
-              <option value="structured">结构化</option>
-              <option value="coding">编程</option>
-            </select>
-          </label>
-          <div class="cpo-prompt-block">
-            <div class="cpo-prompt-head"><span>简洁 · system prompt</span><button type="button" class="cpo-linkish" data-cpo-reset="concise">恢复默认</button></div>
-            <textarea data-cpo-prompt="concise"></textarea>
-          </div>
-          <div class="cpo-prompt-block">
-            <div class="cpo-prompt-head"><span>结构化 · system prompt</span><button type="button" class="cpo-linkish" data-cpo-reset="structured">恢复默认</button></div>
-            <textarea data-cpo-prompt="structured"></textarea>
-          </div>
-          <div class="cpo-prompt-block">
-            <div class="cpo-prompt-head"><span>编程 · system prompt</span><button type="button" class="cpo-linkish" data-cpo-reset="coding">恢复默认</button></div>
-            <textarea data-cpo-prompt="coding"></textarea>
-          </div>
-        </div>
-        <p class="cpo-warn">
-          API Key 保存在本机 localStorage；点击优化会把输入框全文发送到你配置的 API 服务商。仅使用可信的 HTTPS 地址。
-        </p>
-        <div class="cpo-actions">
-          <button type="button" data-cpo-action="close">取消</button>
-          <button type="button" class="cpo-primary" data-cpo-action="save">保存</button>
-        </div>
-      </div>
-    `;
-
-    const protocolEl = overlay.querySelector('[data-cpo="protocol"]');
-    const baseUrlEl = overlay.querySelector('[data-cpo="baseUrl"]');
-    const apiKeyEl = overlay.querySelector('[data-cpo="apiKey"]');
-    const modelEl = overlay.querySelector('[data-cpo="model"]');
-    const styleEl = overlay.querySelector('[data-cpo="style"]');
-    const promptEls = {
-      concise: overlay.querySelector('[data-cpo-prompt="concise"]'),
-      structured: overlay.querySelector('[data-cpo-prompt="structured"]'),
-      coding: overlay.querySelector('[data-cpo-prompt="coding"]'),
-    };
-
-    protocolEl.value = settings.protocol;
-    baseUrlEl.value = settings.baseUrl;
-    apiKeyEl.value = settings.apiKey;
-    modelEl.value = settings.model;
-    styleEl.value = settings.style;
-    promptEls.concise.value = settings.systemPrompts.concise;
-    promptEls.structured.value = settings.systemPrompts.structured;
-    promptEls.coding.value = settings.systemPrompts.coding;
-
-    protocolEl.addEventListener("change", () => {
-      const protocol = protocolEl.value === "anthropic" ? "anthropic" : "openai";
-      const prevOpenAi = DEFAULT_BASE_URLS.openai;
-      const prevAnthropic = DEFAULT_BASE_URLS.anthropic;
-      if (!baseUrlEl.value.trim() || baseUrlEl.value.trim() === prevOpenAi || baseUrlEl.value.trim() === prevAnthropic) {
-        baseUrlEl.value = DEFAULT_BASE_URLS[protocol];
-      }
-      if (
-        !modelEl.value.trim() ||
-        modelEl.value.trim() === DEFAULT_MODELS.openai ||
-        modelEl.value.trim() === DEFAULT_MODELS.anthropic
-      ) {
-        modelEl.value = DEFAULT_MODELS[protocol];
-      }
-    });
-
-    overlay.querySelectorAll("[data-cpo-reset]").forEach((btn) => {
-      btn.addEventListener("click", (event) => {
-        event.preventDefault();
-        const key = btn.getAttribute("data-cpo-reset");
-        if (key && promptEls[key]) promptEls[key].value = DEFAULT_SYSTEM_PROMPTS[key];
-      });
-    });
-
-    overlay.addEventListener("click", (event) => {
-      if (event.target === overlay) closeSettingsPanel();
-    });
-
-    overlay.querySelector('[data-cpo-action="close"]').addEventListener("click", (event) => {
-      event.preventDefault();
-      closeSettingsPanel();
-    });
-
-    overlay.querySelector('[data-cpo-action="save"]').addEventListener("click", (event) => {
-      event.preventDefault();
-      const protocol = protocolEl.value === "anthropic" ? "anthropic" : "openai";
-      let baseUrl;
-      try {
-        baseUrl = normalizeBaseUrl(baseUrlEl.value.trim() || DEFAULT_BASE_URLS[protocol]);
-      } catch (error) {
-        showToast(error?.message || "Base URL 无效", "error");
-        baseUrlEl.focus();
-        return;
-      }
-      const next = {
-        protocol,
-        baseUrl,
-        apiKey: apiKeyEl.value.trim(),
-        model: modelEl.value.trim() || DEFAULT_MODELS[protocol],
-        style:
-          styleEl.value === "concise" || styleEl.value === "coding" || styleEl.value === "structured"
-            ? styleEl.value
-            : "structured",
-        systemPrompts: {
-          concise: promptEls.concise.value.trim() || DEFAULT_SYSTEM_PROMPTS.concise,
-          structured: promptEls.structured.value.trim() || DEFAULT_SYSTEM_PROMPTS.structured,
-          coding: promptEls.coding.value.trim() || DEFAULT_SYSTEM_PROMPTS.coding,
-        },
-      };
-      saveSettings(next);
-      closeSettingsPanel();
-      showToast("设置已保存", "ok");
-    });
-
-    const onKey = (event) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeSettingsPanel();
-      }
-    };
-    overlay.addEventListener("keydown", onKey);
-
-    document.documentElement.appendChild(overlay);
-    apiKeyEl.focus();
+    throw new Error("openSettingsPanel must be provided by build");
   }
 
 

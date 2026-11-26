@@ -7,54 +7,36 @@
       <stop offset="0%" stop-color="#0E1013"/>
       <stop offset="100%" stop-color="#161A20"/>
     </linearGradient>
-    <linearGradient id="sparkFill" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#FFC53D"/>
-      <stop offset="100%" stop-color="#FF9F0A"/>
-    </linearGradient>
   </defs>
 
   <rect width="1200" height="360" rx="16" fill="url(#bg)"/>
-  <!-- subtle composer grid motif -->
-  <g opacity="0.18" stroke="#3A424E" stroke-width="1" fill="none">
+  <g opacity="0.14" stroke="#3A424E" stroke-width="1" fill="none">
     <path d="M760 0V360M920 0V360M1080 0V360"/>
     <path d="M640 72H1200M640 180H1200M640 288H1200"/>
   </g>
 
-  <g transform="translate(56 44)" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif">
-    <text x="0" y="18" fill="#8B929C" font-size="18" font-weight="600" letter-spacing="1.6">CURSOR EXTENSION · WINDOWS</text>
-    <text x="0" y="88" fill="#F5F6F8" font-size="58" font-weight="750">PromptSpark</text>
-    <text x="0" y="136" fill="#FFB000" font-size="24" font-weight="650">Composer 旁的提示词优化与快捷命令</text>
-    <text x="0" y="178" fill="#C8CDD4" font-size="20">闪光优化 / 还原 · 左键发送 · 右键切换命令</text>
-    <text x="0" y="214" fill="#8B929C" font-size="18">拖入 VSIX 安装 · 本机代理 · OpenAI / Anthropic</text>
-
-    <g transform="translate(0 248)" font-family="ui-monospace,SFMono-Regular,Consolas,monospace" font-size="16">
-      <rect width="118" height="28" rx="8" fill="#242A32" stroke="#3A404A"/>
-      <text x="59" y="19" text-anchor="middle" fill="#FFB000">VSIX</text>
-      <rect x="130" width="118" height="28" rx="8" fill="#242A32" stroke="#3A404A"/>
-      <text x="189" y="19" text-anchor="middle" fill="#C8CDD4">RESTART</text>
-      <rect x="260" width="118" height="28" rx="8" fill="#242A32" stroke="#3A404A"/>
-      <text x="319" y="19" text-anchor="middle" fill="#4C8DFF">SPARK</text>
-    </g>
+  <g transform="translate(56 56)" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif">
+    <text x="0" y="18" fill="#8B929C" font-size="16" font-weight="500">Cursor · Windows</text>
+    <text x="0" y="86" fill="#F5F6F8" font-size="54" font-weight="600" letter-spacing="-0.02em">PromptSpark</text>
+    <text x="0" y="132" fill="#FFB000" font-size="22" font-weight="600">Composer 旁的提示词优化与快捷命令</text>
+    <text x="0" y="176" fill="#C8CDD4" font-size="18">闪光优化 / 还原 · 左键发送 · 右键切换命令</text>
+    <text x="0" y="212" fill="#8B929C" font-size="16">拖入 VSIX 安装 · 本机代理 · OpenAI / Anthropic</text>
   </g>
 
-  <!-- Composer strip proof -->
   <g transform="translate(620 48)" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif">
     <rect width="524" height="264" rx="14" fill="#1A1E24" stroke="#3A404A"/>
-    <text x="24" y="36" fill="#8B929C" font-size="16" font-weight="600" letter-spacing="1.2">COMPOSER</text>
+    <text x="24" y="36" fill="#8B929C" font-size="15" font-weight="500">Composer</text>
 
     <rect x="24" y="52" width="476" height="88" rx="12" fill="#242A32"/>
     <text x="44" y="90" fill="#AEB4BD" font-size="20">帮我把这段需求写清楚…</text>
-    <text x="44" y="118" fill="#6E757F" font-size="16">草稿 → 点闪光优化</text>
+    <text x="44" y="118" fill="#6E757F" font-size="15">草稿 → 点闪光优化</text>
 
-    <!-- toolbar: 继续 · spark · peers -->
     <g transform="translate(24 164)">
       <rect width="64" height="36" rx="10" fill="#2A313A"/>
-      <text x="32" y="24" text-anchor="middle" fill="#F5F6F8" font-size="16" font-weight="600">继续</text>
+      <text x="32" y="24" text-anchor="middle" fill="#F5F6F8" font-size="15" font-weight="600">继续</text>
 
-      <circle cx="104" cy="18" r="18" fill="url(#sparkFill)"/>
-      <path d="M104 6L107.2 14.8L116 18L107.2 21.2L104 30L100.8 21.2L92 18L100.8 14.8Z" fill="#111315"/>
+      <image href="../brand/logo-promptspark.png" x="86" y="0" width="36" height="36" />
 
-      <!-- peer icon stubs matching Cursor spacing -->
       <g transform="translate(148 6)" fill="none" stroke="#9AA1AB" stroke-width="2" stroke-linecap="round">
         <circle cx="12" cy="12" r="10"/>
         <path d="M12 7V17M7 12H17"/>
@@ -67,7 +49,7 @@
       <path d="M268 11V25M261 18L268 11L275 18" stroke="#F5F6F8" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
     </g>
 
-    <text x="24" y="236" fill="#8B929C" font-size="16">左键发送当前快捷命令</text>
-    <text x="250" y="236" fill="#76A7FF" font-size="16">右键切换 · Alt+闪光 = 设置</text>
+    <text x="24" y="236" fill="#8B929C" font-size="15">左键发送当前快捷命令</text>
+    <text x="250" y="236" fill="#9BB6E8" font-size="15">右键切换 · Alt+闪光打开设置</text>
   </g>
 </svg>

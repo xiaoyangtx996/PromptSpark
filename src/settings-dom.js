@@ -60,8 +60,8 @@
     const svg = document.createElementNS(svgNS, "svg");
     svg.setAttribute("class", "cpo-github-icon");
     svg.setAttribute("viewBox", "0 0 16 16");
-    svg.setAttribute("width", "16");
-    svg.setAttribute("height", "16");
+    svg.setAttribute("width", "17");
+    svg.setAttribute("height", "17");
     svg.setAttribute("aria-hidden", "true");
     const path = document.createElementNS(svgNS, "path");
     path.setAttribute(
@@ -74,31 +74,132 @@
   }
 
   function cpoBrandIcon() {
+    const img = document.createElement("img");
+    img.className = "cpo-brand-icon";
+    img.width = 36;
+    img.height = 36;
+    img.alt = "";
+    img.setAttribute("aria-hidden", "true");
+    // build.mjs inlines assets/brand/logo-promptspark.png (mark)
+    img.src = "__CPO_BRAND_ICON_DATA_URL__";
+    return img;
+  }
+
+  function cpoBrandBlock() {
+    return cpoEl("div", { className: "cpo-brand" }, [
+      cpoBrandIcon(),
+      cpoEl("span", { className: "cpo-brand-name", text: "PromptSpark" }),
+    ]);
+  }
+
+  function cpoSecTitle(text, opts) {
+    const strong = opts && opts.strong;
+    return cpoEl("div", { className: strong ? "cpo-sec-title cpo-sec-title-strong" : "cpo-sec-title" }, [
+      cpoEl("span", { className: "cpo-sec-bar", "aria-hidden": "true" }),
+      cpoEl("span", { className: "cpo-sec-text", text }),
+    ]);
+  }
+
+  function cpoLucideSvg(className, size, paths) {
     const svgNS = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(svgNS, "svg");
-    svg.setAttribute("class", "cpo-brand-icon");
-    svg.setAttribute("viewBox", "0 0 128 128");
-    svg.setAttribute("width", "28");
-    svg.setAttribute("height", "28");
+    svg.setAttribute("class", className);
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", String(size));
+    svg.setAttribute("height", String(size));
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "1.8");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
     svg.setAttribute("aria-hidden", "true");
-    const tile = document.createElementNS(svgNS, "rect");
-    tile.setAttribute("width", "128");
-    tile.setAttribute("height", "128");
-    tile.setAttribute("rx", "22");
-    tile.setAttribute("fill", "#0F1115");
-    const spark = document.createElementNS(svgNS, "path");
-    spark.setAttribute("d", "M64 20L78 52L110 66L78 80L64 112L50 80L18 66L50 52Z");
-    spark.setAttribute("fill", "#FFB000");
-    const core = document.createElementNS(svgNS, "path");
-    core.setAttribute("d", "M64 48L70 60L82 66L70 72L64 84L58 72L46 66L58 60Z");
-    core.setAttribute("fill", "#FFD678");
-    const mini = document.createElementNS(svgNS, "path");
-    mini.setAttribute("d", "M98 18L102 26L110 30L102 34L98 42L94 34L86 30L94 26Z");
-    mini.setAttribute("fill", "#FFB000");
-    svg.appendChild(tile);
-    svg.appendChild(spark);
-    svg.appendChild(core);
-    svg.appendChild(mini);
+    for (const d of paths) {
+      const path = document.createElementNS(svgNS, "path");
+      path.setAttribute("d", d);
+      svg.appendChild(path);
+    }
+    return svg;
+  }
+
+  function cpoInfoGlyph() {
+    return cpoLucideSvg("cpo-info-glyph", 12, [
+      "M12 16v-4",
+      "M12 8h.01",
+      "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z",
+    ]);
+  }
+
+  function cpoTabGlyph(kind) {
+    if (kind === "styles") {
+      // Lucide sparkle
+      return cpoLucideSvg("cpo-tab-glyph", 13, [
+        "M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z",
+        "M5 16l.8 2.2L8 19l-2.2.8L5 22l-.8-2.2L2 19l2.2-.8L5 16z",
+        "M19 13l.6 1.6L21 15l-1.4.6L19 17l-.6-1.4L17 15l1.4-.6L19 13z",
+      ]);
+    }
+    if (kind === "commands") {
+      // Lucide zap
+      return cpoLucideSvg("cpo-tab-glyph", 13, ["M13 2L3 14h9l-1 8 10-12h-9l1-8z"]);
+    }
+    // Lucide settings (simplified gear)
+    return cpoLucideSvg("cpo-tab-glyph", 13, [
+      "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
+      "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.36.31.83.47 1.31.43H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z",
+    ]);
+  }
+
+  function cpoCloseGlyph() {
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("class", "cpo-close-glyph");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", "18");
+    svg.setAttribute("height", "18");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "1.8");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("aria-hidden", "true");
+    const path = document.createElementNS(svgNS, "path");
+    path.setAttribute("d", "M18 6L6 18M6 6l12 12");
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", "currentColor");
+    path.setAttribute("stroke-width", "1.8");
+    path.setAttribute("stroke-linecap", "round");
+    svg.appendChild(path);
+    return svg;
+  }
+
+  function cpoHelpGlyph() {
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("class", "cpo-help-glyph");
+    svg.setAttribute("viewBox", "0 0 16 16");
+    svg.setAttribute("width", "12");
+    svg.setAttribute("height", "12");
+    svg.setAttribute("aria-hidden", "true");
+    const circle = document.createElementNS(svgNS, "circle");
+    circle.setAttribute("cx", "8");
+    circle.setAttribute("cy", "8");
+    circle.setAttribute("r", "6.2");
+    circle.setAttribute("fill", "none");
+    circle.setAttribute("stroke", "currentColor");
+    circle.setAttribute("stroke-width", "1.4");
+    const q = document.createElementNS(svgNS, "path");
+    q.setAttribute("d", "M5.8 6.1c0-1.2.9-2 2.2-2s2.2.8 2.2 1.9c0 .9-.5 1.4-1.3 1.8-.5.3-.7.5-.7 1.1v.3");
+    q.setAttribute("fill", "none");
+    q.setAttribute("stroke", "currentColor");
+    q.setAttribute("stroke-width", "1.4");
+    q.setAttribute("stroke-linecap", "round");
+    const dot = document.createElementNS(svgNS, "circle");
+    dot.setAttribute("cx", "8");
+    dot.setAttribute("cy", "11.6");
+    dot.setAttribute("r", "0.85");
+    dot.setAttribute("fill", "currentColor");
+    svg.appendChild(circle);
+    svg.appendChild(q);
+    svg.appendChild(dot);
     return svg;
   }
 
@@ -172,7 +273,7 @@
     return normalizeCommands(commands).map((c) => ({ ...c }));
   }
 
-  function openSettingsPanelDomSafe() {
+  function openSettingsPanelDomSafe(opts) {
     closeSettingsPanel();
     const settings = loadSettings();
     let draftStyles = cloneStyles(settings.styles);
@@ -182,7 +283,10 @@
     let activeCommandId = settings.activeCommandId || DEFAULT_COMMAND_ID;
     if (!draftCommands.some((c) => c.id === activeCommandId)) activeCommandId = draftCommands[0].id;
     let protocolValue = settings.protocol === "anthropic" ? "anthropic" : "openai";
-    let mainTab = "styles";
+    let mainTab =
+      opts && typeof opts === "object" && ["styles", "commands", "model"].includes(opts.tab)
+        ? opts.tab
+        : "styles";
 
     const overlay = cpoEl("div", { [PANEL_ATTR]: "true", className: "cpo-apple" });
 
@@ -233,7 +337,7 @@
       modelPickTrigger,
       modelPickMenu,
     ]);
-    let fetchedModelIds = [];
+    let fetchedModelIds = Array.isArray(settings.modelIds) ? settings.modelIds.slice() : [];
     const modelRow = cpoEl("div", { className: "cpo-model-row" }, [modelPickDd, modelFetchBtn]);
     const warnEl = cpoEl("div", { className: "cpo-warn-banner", hidden: "true" });
 
@@ -245,7 +349,7 @@
       "aria-haspopup": "listbox",
       "aria-expanded": "false",
     });
-    const styleDdValue = cpoEl("span", { className: "cpo-dd-value", text: "选择自定义风格" });
+    const styleDdValue = cpoEl("span", { className: "cpo-dd-value", text: "暂无自定义 · 点击新增" });
     styleDdTrigger.appendChild(styleDdValue);
     styleDdTrigger.appendChild(cpoCaret());
     const styleDdMenu = cpoEl("div", {
@@ -255,6 +359,12 @@
     });
     styleDd.appendChild(styleDdTrigger);
     styleDd.appendChild(styleDdMenu);
+    const styleAddBtn = cpoEl("button", {
+      type: "button",
+      className: "cpo-btn-add",
+      text: "+ 新增",
+      title: "新增自定义风格",
+    });
 
     const styleNameEl = cpoEl("input", {
       "data-cpo": "styleName",
@@ -267,7 +377,14 @@
       placeholder: "System prompt",
       rows: "5",
     });
-    const styleLockHint = cpoEl("div", { className: "cpo-lock-hint" });
+    const promptHelp = cpoEl("button", {
+      type: "button",
+      className: "cpo-prompt-help",
+      title:
+        "默认风格不可删除，system prompt 不可修改。自定义风格可改名与 system prompt；下拉项右侧 × 可删除。",
+      "aria-label": "系统提示词说明",
+    });
+    promptHelp.appendChild(cpoHelpGlyph());
 
     const commandDd = cpoEl("div", { className: "cpo-dd cpo-command-dd" });
     const commandDdTrigger = cpoEl("button", {
@@ -486,13 +603,14 @@
     function commitCurrent() {
       const cur = draftStyles.find((s) => s.id === activeId);
       if (!cur) return;
-      if (!isLockedStyle(cur.id)) {
-        cur.name = styleNameEl.value.trim() || cur.name || "自定义";
+      if (isLockedStyle(cur.id)) {
+        cur.name = (defaultStyleList().find((d) => d.id === cur.id) || cur).name;
+        cur.systemPrompt = DEFAULT_SYSTEM_PROMPTS[cur.id] || DEFAULT_SYSTEM_PROMPTS.structured;
+        return;
       }
+      cur.name = styleNameEl.value.trim() || cur.name || "自定义";
       const prompt = stylePromptEl.value;
-      cur.systemPrompt = prompt.trim()
-        ? prompt
-        : DEFAULT_SYSTEM_PROMPTS[cur.id] || DEFAULT_SYSTEM_PROMPTS.structured;
+      cur.systemPrompt = prompt.trim() ? prompt : DEFAULT_SYSTEM_PROMPTS.structured;
     }
 
     function commitCommandEditor() {
@@ -511,10 +629,14 @@
       const locked = isLockedStyle(cur.id);
       styleNameEl.value = cur.name;
       styleNameEl.disabled = locked;
-      stylePromptEl.value = cur.systemPrompt || "";
-      styleLockHint.textContent = locked
-        ? "默认风格不可删除，可微调 system prompt"
-        : "自定义风格可改名；下拉项右侧 × 可删除";
+      stylePromptEl.value = locked
+        ? DEFAULT_SYSTEM_PROMPTS[cur.id] || cur.systemPrompt || ""
+        : cur.systemPrompt || "";
+      stylePromptEl.readOnly = locked;
+      stylePromptEl.disabled = locked;
+      promptHelp.title = locked
+        ? "默认风格不可删除，system prompt 不可修改"
+        : "自定义风格可改名与 system prompt；下拉项右侧 × 可删除";
 
       segment.querySelectorAll("[data-style-id]").forEach((btn) => {
         btn.setAttribute("aria-selected", btn.getAttribute("data-style-id") === activeId ? "true" : "false");
@@ -528,7 +650,7 @@
         styleDdValue.textContent = "选择自定义风格";
         styleDd.classList.remove("has-value");
       } else {
-        styleDdValue.textContent = "暂无自定义 · 点下方新增";
+        styleDdValue.textContent = "暂无自定义 · 点击新增";
         styleDd.classList.remove("has-value");
       }
 
@@ -582,7 +704,7 @@
       draftCommands.push({
         id,
         title: `命令 ${n}`,
-        content: "/navigate-software-development",
+        content: typeof CONTINUE_PROMPT_TEXT === "string" ? CONTINUE_PROMPT_TEXT : "继续",
       });
       activeCommandId = id;
       rebuildCommandUi();
@@ -659,17 +781,11 @@
         row.appendChild(xBtn);
         styleDdMenu.appendChild(row);
       }
-      const addBtn = cpoEl("button", {
-        type: "button",
-        className: "cpo-dd-add",
-        text: "＋ 新增风格",
-      });
-      addBtn.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        addCustomStyle();
-      });
-      styleDdMenu.appendChild(addBtn);
+      if (!customs.length) {
+        styleDdMenu.appendChild(
+          cpoEl("div", { className: "cpo-dd-empty", text: "暂无自定义风格，点右侧「新增」" }),
+        );
+      }
     }
 
     function rebuildStyleUi() {
@@ -765,36 +881,41 @@
     }
 
     paneStyles.append(
-      cpoEl("div", { className: "cpo-block-head" }, [
-        cpoEl("h3", { className: "cpo-h3", text: "风格" }),
-        segment,
+      cpoEl("div", { className: "cpo-styles-compact" }, [
+        cpoEl("div", { className: "cpo-inline-row" }, [cpoSecTitle("风格"), segment]),
+        cpoEl("div", { className: "cpo-custom-block" }, [
+          cpoEl("div", { className: "cpo-inline-row" }, [cpoSecTitle("自定义"), styleAddBtn]),
+          styleDd,
+        ]),
+        cpoEl("div", { className: "cpo-field cpo-field-name" }, [
+          cpoSecTitle("名称"),
+          styleNameEl,
+        ]),
       ]),
-      cpoEl("label", { className: "cpo-field" }, [cpoEl("span", { text: "自定义" }), styleDd]),
-      styleLockHint,
-      cpoEl("label", { className: "cpo-field" }, [cpoEl("span", { text: "名称" }), styleNameEl]),
-      cpoEl("label", { className: "cpo-field cpo-field-grow" }, [cpoEl("span", { text: "System prompt" }), stylePromptEl]),
+      cpoEl("div", { className: "cpo-prompt-panel" }, [
+        cpoEl("div", { className: "cpo-prompt-head-row" }, [
+          cpoSecTitle("System prompt", { strong: true }),
+          promptHelp,
+        ]),
+        stylePromptEl,
+      ]),
     );
 
     paneCommands.append(
-      cpoEl("label", { className: "cpo-field" }, [cpoEl("span", { text: "当前命令" }), commandDd]),
-      commandHintEl,
-      cpoEl("label", { className: "cpo-field" }, [cpoEl("span", { text: "标题" }), commandTitleEl]),
-      cpoEl("label", { className: "cpo-field cpo-field-grow" }, [cpoEl("span", { text: "内容" }), commandContentEl]),
+      cpoEl("div", { className: "cpo-field" }, [cpoSecTitle("当前命令"), commandDd]),
+      cpoEl("div", { className: "cpo-hint-row" }, [cpoInfoGlyph(), commandHintEl]),
+      cpoEl("div", { className: "cpo-field" }, [cpoSecTitle("标题"), commandTitleEl]),
+      cpoEl("div", { className: "cpo-field cpo-field-grow" }, [cpoSecTitle("内容"), commandContentEl]),
     );
 
     paneModel.append(
-      cpoEl("h3", { className: "cpo-h3", text: "接口" }),
       cpoEl("div", { className: "cpo-fields" }, [
-        cpoEl("label", { className: "cpo-field cpo-span2" }, [cpoEl("span", { text: "协议" }), protocolDd]),
-        cpoEl("label", { className: "cpo-field cpo-span2" }, [cpoEl("span", { text: "Base URL" }), baseUrlEl]),
-        cpoEl("label", { className: "cpo-field" }, [cpoEl("span", { text: "API Key" }), apiKeyEl]),
-        cpoEl("label", { className: "cpo-field" }, [cpoEl("span", { text: "Model" }), modelRow]),
+        cpoEl("div", { className: "cpo-field cpo-span2" }, [cpoSecTitle("协议"), protocolDd]),
+        cpoEl("div", { className: "cpo-field cpo-span2" }, [cpoSecTitle("Base URL"), baseUrlEl]),
+        cpoEl("div", { className: "cpo-field" }, [cpoSecTitle("API Key"), apiKeyEl]),
+        cpoEl("div", { className: "cpo-field" }, [cpoSecTitle("Model"), modelRow]),
       ]),
       warnEl,
-      cpoEl("p", {
-        className: "cpo-footnote",
-        text: `宿主 ${typeof HOST === "string" ? HOST : "cursor"} · 扩展本机代理 127.0.0.1:37841（随 PromptSpark 启动）`,
-      }),
     );
 
     rebuildProtocolMenu();
@@ -806,7 +927,7 @@
     baseUrlEl.addEventListener("input", updateMismatchWarn);
     updateMismatchWarn();
 
-    rebuildModelPickMenu([]);
+    rebuildModelPickMenu(fetchedModelIds);
     modelPickTrigger.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -851,6 +972,12 @@
           }
           rebuildModelPickMenu(ids, { open: true });
           showToast(`已拉取 ${ids.length} 个模型`, "ok");
+          try {
+            const cur = loadSettings();
+            saveSettings({ ...cur, modelIds: ids.slice() });
+          } catch (_) {
+            /* ignore */
+          }
         }
       } catch (error) {
         showToast(collapseWs(error?.message || "拉取模型失败").slice(0, 160), "error");
@@ -862,7 +989,7 @@
     });
     rebuildStyleUi();
     rebuildCommandUi();
-    setMainTab("styles");
+    setMainTab(mainTab);
 
     protocolTrigger.addEventListener("click", (e) => {
       e.preventDefault();
@@ -874,6 +1001,12 @@
       e.stopPropagation();
       toggleMenu(styleDd);
     });
+    styleAddBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeAllMenus();
+      addCustomStyle();
+    });
     commandDdTrigger.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -883,18 +1016,18 @@
       commandDdValue.textContent = commandTitleEl.value.trim() || "未命名";
     });
 
+    const closeIconBtn = cpoEl("button", {
+      type: "button",
+      className: "cpo-close-x",
+      "data-cpo-action": "close",
+      title: "关闭",
+      "aria-label": "关闭",
+    });
+    closeIconBtn.appendChild(cpoCloseGlyph());
+
     const card = cpoEl("div", { className: "cpo-card", role: "dialog", "aria-modal": "true", "aria-label": "PromptSpark" }, [
-      cpoEl("header", { className: "cpo-sheet-head" }, [
-        cpoEl("div", { className: "cpo-brand" }, [
-          cpoBrandIcon(),
-          cpoEl("div", { className: "cpo-brand-copy" }, [
-            cpoEl("h2", { text: "PromptSpark" }),
-            cpoEl("p", { className: "cpo-sub", text: "优化 · 快捷命令 · Alt+点击打开设置" }),
-          ]),
-        ]),
-        cpoEl("button", { type: "button", className: "cpo-close", "data-cpo-action": "close", text: "关闭" }),
-      ]),
-      mainTabBar,
+      cpoEl("header", { className: "cpo-sheet-head" }, [cpoBrandBlock(), closeIconBtn]),
+      cpoEl("div", { className: "cpo-nav-wrap" }, [mainTabBar]),
       cpoEl("div", { className: "cpo-pane-host" }, [paneStyles, paneCommands, paneModel]),
       cpoEl("footer", { className: "cpo-sheet-foot" }, [
         cpoEl(
@@ -921,11 +1054,106 @@
       event.stopPropagation();
     });
 
-    overlay.addEventListener("click", (event) => {
-      if (event.target === overlay) {
+    function draftSnapshot() {
+      commitCurrent();
+      commitCommandEditor();
+      return JSON.stringify({
+        protocol: protocolValue === "anthropic" ? "anthropic" : "openai",
+        baseUrl: baseUrlEl.value.trim(),
+        apiKey: apiKeyEl.value.trim(),
+        model: modelEl.value.trim(),
+        style: activeId,
+        styles: draftStyles.map((s) => ({
+          id: s.id,
+          name: s.name,
+          systemPrompt: String(s.systemPrompt || ""),
+        })),
+        commands: draftCommands.map((c) => ({
+          id: c.id,
+          title: c.title,
+          content: c.content,
+        })),
+        activeCommandId,
+      });
+    }
+    // Stabilize commits once, then freeze baseline after focus so open/focus
+    // side-effects do not mark the sheet dirty.
+    let initialSnapshot = draftSnapshot();
+
+    function isDirty() {
+      return draftSnapshot() !== initialSnapshot;
+    }
+
+    const confirmStayBtn = cpoEl("button", {
+      type: "button",
+      className: "cpo-confirm-btn",
+      "data-cpo-confirm": "stay",
+      text: "继续编辑",
+    });
+    const confirmLeaveBtn = cpoEl("button", {
+      type: "button",
+      className: "cpo-confirm-btn cpo-confirm-btn-danger",
+      "data-cpo-confirm": "leave",
+      text: "放弃并关闭",
+    });
+    const confirmDialog = cpoEl("div", { className: "cpo-confirm-dialog" }, [
+      cpoEl("h3", { className: "cpo-confirm-title", text: "未存储的修改" }),
+      cpoEl("p", { className: "cpo-confirm-msg", text: "关闭后将丢失本次未保存的改动。" }),
+      cpoEl("div", { className: "cpo-confirm-actions" }, [confirmStayBtn, confirmLeaveBtn]),
+    ]);
+    const confirmLayer = cpoEl(
+      "div",
+      {
+        className: "cpo-confirm",
+        role: "alertdialog",
+        "aria-modal": "true",
+        "aria-label": "未存储确认",
+      },
+      [confirmDialog],
+    );
+    card.appendChild(confirmLayer);
+
+    function hideCloseConfirm() {
+      confirmLayer.classList.remove("is-open");
+    }
+
+    function showCloseConfirm() {
+      closeAllMenus();
+      confirmLayer.classList.add("is-open");
+      confirmStayBtn.focus();
+    }
+
+    function requestClose() {
+      if (!isDirty()) {
         closeSettingsPanel();
         return;
       }
+      if (confirmLayer.classList.contains("is-open")) return;
+      showCloseConfirm();
+    }
+
+    confirmStayBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      hideCloseConfirm();
+    });
+    confirmLeaveBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeSettingsPanel();
+    });
+    confirmLayer.addEventListener("click", (event) => {
+      if (event.target === confirmLayer) {
+        event.preventDefault();
+        hideCloseConfirm();
+      }
+    });
+    confirmDialog.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+
+    // Scrim click must not close the sheet — only 关闭 / 取消（确认后）.
+    overlay.addEventListener("click", (event) => {
       if (!(event.target instanceof Element) || !event.target.closest(".cpo-dd")) {
         closeAllMenus();
       }
@@ -933,10 +1161,10 @@
     overlay.querySelectorAll('[data-cpo-action="close"]').forEach((btn) => {
       btn.addEventListener("click", (event) => {
         event.preventDefault();
-        closeSettingsPanel();
+        requestClose();
       });
     });
-    overlay.querySelector('[data-cpo-action="save"]').addEventListener("click", (event) => {
+    overlay.querySelector('[data-cpo-action="save"]').addEventListener("click", async (event) => {
       event.preventDefault();
       commitCurrent();
       commitCommandEditor();
@@ -964,15 +1192,24 @@
       if (!draftStyles.some((s) => s.id === activeId)) activeId = "structured";
       draftCommands = cloneCommands(draftCommands);
       if (!draftCommands.some((c) => c.id === activeCommandId)) activeCommandId = draftCommands[0].id;
-      saveSettings({
+      const stored = saveSettings({
         protocol,
         baseUrl,
         apiKey: apiKeyEl.value.trim(),
         model,
         style: activeId,
-        styles: draftStyles.map((s) => ensureStylePrompt(s)),
+        styles: draftStyles.map((s) => {
+          const row = ensureStylePrompt(s);
+          if (!isLockedStyle(row.id)) return row;
+          return {
+            ...row,
+            name: (defaultStyleList().find((d) => d.id === row.id) || row).name,
+            systemPrompt: DEFAULT_SYSTEM_PROMPTS[row.id] || DEFAULT_SYSTEM_PROMPTS.structured,
+          };
+        }),
         commands: draftCommands,
         activeCommandId,
+        modelIds: fetchedModelIds.slice(),
       });
       try {
         refreshContinueButtonAppearance();
@@ -980,23 +1217,47 @@
         /* ignore */
       }
       closeSettingsPanel();
-      showToast("已存储", "ok");
+      let disk = { ok: false, reason: "skipped" };
+      try {
+        if (typeof pushSettingsToDisk === "function") {
+          disk = await pushSettingsToDisk(stored);
+        }
+      } catch (_) {
+        disk = { ok: false, reason: "error" };
+      }
+      if (disk?.ok) {
+        showToast("已存储", "ok");
+      } else if (disk?.reason === "old-proxy") {
+        showToast("已存到缓存；代理过旧，请完全退出 Cursor 后再开，否则更新插件可能丢失", "warn");
+      } else {
+        showToast("已存到缓存；磁盘同步失败，更新插件前请确认扩展代理已启动", "warn");
+      }
     });
     overlay.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        const anyOpen =
-          protocolDd.classList.contains("is-open") ||
-          styleDd.classList.contains("is-open") ||
-          commandDd.classList.contains("is-open");
-        if (anyOpen) {
+        if (confirmLayer.classList.contains("is-open")) {
+          hideCloseConfirm();
+          return;
+        }
+        if (overlay.querySelector(".cpo-dd.is-open")) {
           closeAllMenus();
           return;
         }
-        closeSettingsPanel();
+        // Same as 取消 — no header close button.
+        requestClose();
       }
     });
 
     document.documentElement.appendChild(overlay);
-    stylePromptEl.focus();
+    if (stylePromptEl.disabled) {
+      if (mainTab === "model") baseUrlEl.focus();
+      else if (mainTab === "commands") commandTitleEl.focus();
+      else styleDdTrigger.focus();
+    } else {
+      stylePromptEl.focus();
+    }
+    queueMicrotask(() => {
+      initialSnapshot = draftSnapshot();
+    });
   }

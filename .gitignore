@@ -8,8 +8,13 @@ Thumbs.db
 .env.*
 !.env.example
 
-# Local agent notes (not part of the product)
+# Local agent / IDE notes (not part of the product)
+.cursor/
 KNOWLEDGE.md
 docs/
 *.tmp.mjs
 scripts/tmp-*.mjs
+scripts/tmp-*.py
+scripts/_patch-*.mjs
+__pycache__/
+*.pyc

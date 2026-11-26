@@ -18,7 +18,7 @@ const tag = `v${version}`;
 const vsix = path.join(ROOT, "dist", `PromptSpark-${version}.vsix`);
 
 if (!fs.existsSync(vsix)) {
-  console.error(`Missing ${vsix}. Run: npm run pack:vsix`);
+  console.error(`Missing ${vsix}. Run: npm run pack:vsix -- --no-bump`);
   process.exit(1);
 }
 
@@ -27,14 +27,15 @@ const notes = `## PromptSpark ${tag}
 ### 安装
 1. 下载 \`PromptSpark-${version}.vsix\`
 2. 拖进 Cursor（或扩展 → 从 VSIX 安装）
-3. 若提示已写入 Composer 控件，请完全退出并重新打开 Cursor
+3. 若提示已写入 Composer 控件，请**完全退出并重新打开** Cursor
 
 ### 更新说明
-- VSIX 拖装，扩展内嵌本机代理（\`127.0.0.1:37841\`）
-- Composer 闪光优化/还原 +「继续」快捷命令
-- 支持从 Base URL + API Key 拉取模型列表
-- 单次 paste 写入（保留换行）
-- 默认「简洁 / 结构化 / 编程」system prompt 与上游一致
+- 设置面板按像素规范重排：单层白卡片、分区橙竖条、透明遮罩
+- 顶部 Tab / 风格分段恢复初始 iOS 分段质感；焦点输入恢复偏橙描边
+- 「+ 新增」单行显示；确认弹窗按钮不再挤换行；未改动关闭不再误报
+- 模型配置去掉多余「接口」标题与底部代理说明长文案
+- 默认风格说明收入 System prompt 旁「？」悬停提示
+- 品牌 Logo 透明底；UI 统一系统字体
 `;
 
 const notesFile = path.join(ROOT, "dist", `release-notes-${version}.md`);

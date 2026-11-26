@@ -11,11 +11,15 @@ const sourcePath = path.join(root, "src", "prompt-optimize.codex-source.js");
 const adaptersPath = path.join(root, "src", "host-adapters.js");
 const settingsDomPath = path.join(root, "src", "settings-dom.js");
 const outPath = path.join(root, "dist", "prompt-optimize.js");
-const VERSION = "1.4.10";
+const VERSION = "1.4.11";
 
 let src = fs.readFileSync(sourcePath, "utf8");
 let adapters = fs.readFileSync(adaptersPath, "utf8");
-const settingsDom = fs.readFileSync(settingsDomPath, "utf8");
+const brandIconPng = fs.readFileSync(path.join(root, "assets", "brand", "logo-promptspark.png"));
+const brandIconDataUrl = `data:image/png;base64,${brandIconPng.toString("base64")}`;
+const settingsDom = fs
+  .readFileSync(settingsDomPath, "utf8")
+  .replaceAll("__CPO_BRAND_ICON_DATA_URL__", brandIconDataUrl);
 
 adapters = adapters
   .replace(/^\s*const\s+HOST\s*=\s*detectHost\(\);/m, "  HOST = detectHost();")
@@ -84,6 +88,7 @@ src = src.replace(
       styles: defaultStyleList(),
       activeCommandId: DEFAULT_COMMAND_ID,
       commands: defaultCommandList(),
+      modelIds: [],
     };
   }`,
 );
@@ -138,6 +143,16 @@ src = src.replace(
       for (const def of defaultStyleList()) {
         if (!byId.has(def.id)) styles.unshift({ ...def });
       }
+      // Built-in styles always use shipped prompts (UI is read-only).
+      styles = styles.map((s) => {
+        if (!["concise", "structured", "coding"].includes(s.id)) return s;
+        const def = defaultStyleList().find((d) => d.id === s.id) || s;
+        return {
+          ...s,
+          name: def.name,
+          systemPrompt: DEFAULT_SYSTEM_PROMPTS[s.id] || def.systemPrompt,
+        };
+      });
       let style = typeof parsed.style === "string" && parsed.style.trim() ? parsed.style.trim() : "structured";
       if (!styles.some((s) => s.id === style)) style = "structured";
       const commands = normalizeCommands(parsed.commands);
@@ -146,22 +161,46 @@ src = src.replace(
           ? parsed.activeCommandId.trim()
           : DEFAULT_COMMAND_ID;
       if (!commands.some((c) => c.id === activeCommandId)) activeCommandId = commands[0].id;
+      const modelIds = Array.isArray(parsed.modelIds)
+        ? parsed.modelIds.map((id) => String(id || "").trim()).filter(Boolean)
+        : [];
       return {
         protocol,
         baseUrl: typeof parsed.baseUrl === "string" && parsed.baseUrl.trim() ? parsed.baseUrl.trim() : DEFAULT_BASE_URLS[protocol],
-        apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
+        apiKey: decodeStoredApiKey(typeof parsed.apiKey === "string" ? parsed.apiKey : ""),
         model: typeof parsed.model === "string" && parsed.model.trim() ? parsed.model.trim() : DEFAULT_MODELS[protocol],
         style,
         styles,
         commands,
         activeCommandId,
+        modelIds,
       };
     } catch (_) {
       return defaultSettings();
     }
   }
 
-  function saveSettings(settings) {`,
+  function encodeStoredApiKey(plain) {
+    const s = String(plain || "");
+    if (!s || s.startsWith("ps1:")) return s;
+    try {
+      return "ps1:" + btoa(unescape(encodeURIComponent(s)));
+    } catch (_) {
+      return s;
+    }
+  }
+
+  function decodeStoredApiKey(stored) {
+    const s = String(stored || "");
+    if (!s.startsWith("ps1:")) return s;
+    try {
+      return decodeURIComponent(escape(atob(s.slice(4))));
+    } catch (_) {
+      return s.slice(4);
+    }
+  }
+
+  function saveSettings(settings) {`
 );
 
 src = src.replace(
@@ -173,15 +212,30 @@ src = src.replace(
         ? settings.activeCommandId.trim()
         : DEFAULT_COMMAND_ID;
     if (!commands.some((c) => c.id === activeCommandId)) activeCommandId = commands[0].id;
+    let styles = Array.isArray(settings?.styles) ? settings.styles : defaultStyleList();
+    styles = styles.map((s) => {
+      if (!s || typeof s !== "object") return s;
+      if (!["concise", "structured", "coding"].includes(s.id)) return s;
+      const def = defaultStyleList().find((d) => d.id === s.id) || s;
+      return {
+        ...s,
+        name: def.name,
+        systemPrompt: DEFAULT_SYSTEM_PROMPTS[s.id] || def.systemPrompt,
+      };
+    });
+    const modelIds = Array.isArray(settings?.modelIds)
+      ? settings.modelIds.map((id) => String(id || "").trim()).filter(Boolean)
+      : [];
     const next = {
       protocol: settings?.protocol === "anthropic" ? "anthropic" : "openai",
       baseUrl: typeof settings?.baseUrl === "string" ? settings.baseUrl : "",
-      apiKey: typeof settings?.apiKey === "string" ? settings.apiKey : "",
+      apiKey: encodeStoredApiKey(typeof settings?.apiKey === "string" ? settings.apiKey : ""),
       model: typeof settings?.model === "string" ? settings.model : "",
       style: typeof settings?.style === "string" ? settings.style : "structured",
-      styles: Array.isArray(settings?.styles) ? settings.styles : defaultStyleList(),
+      styles,
       commands,
       activeCommandId,
+      modelIds,
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
     try {
@@ -189,9 +243,11 @@ src = src.replace(
     } catch (_) {
       /* ignore */
     }
+    void pushSettingsToDisk(next);
+    return next;
   }
 
-  function isConfigured`,
+  function isConfigured`
 );
 
 src = src.replace(
@@ -251,6 +307,104 @@ src = src.replace(
       await new Promise((r) => setTimeout(r, 200));
     }
     return false;
+  }
+
+  let warnedOldSettingsProxy = false;
+
+  async function probeSettingsProxy(waitMs = 800) {
+    try {
+      wakeLocalProxy();
+      const up = await waitLocalProxy(waitMs);
+      if (!up) return "down";
+      const healthRes = await fetch(LOCAL_PROXY + "/health", { signal: AbortSignal.timeout(500) });
+      if (!healthRes.ok) return "down";
+      const health = await healthRes.json();
+      if (!health || health.settingsPath == null) return "old";
+      return "ok";
+    } catch (_) {
+      return "down";
+    }
+  }
+
+  function warnSettingsProxyOnce(kind) {
+    if (warnedOldSettingsProxy) return;
+    warnedOldSettingsProxy = true;
+    if (kind === "old") {
+      showToast("本机代理版本过旧，配置可能无法写入磁盘。请完全退出 Cursor 后再打开", "warn");
+    } else if (kind === "down") {
+      showToast("本机代理未就绪，配置先存在缓存；更新插件前请确认扩展已启动", "warn");
+    }
+  }
+
+  async function pullSettingsFromDisk(opts) {
+    const waitMs = opts && typeof opts.waitMs === "number" ? opts.waitMs : 600;
+    const fetchTimeoutMs = opts && typeof opts.fetchTimeoutMs === "number" ? opts.fetchTimeoutMs : 800;
+    try {
+      const probe = await probeSettingsProxy(waitMs);
+      if (probe === "old") {
+        warnSettingsProxyOnce("old");
+        return false;
+      }
+      if (probe === "down") return false;
+      const res = await fetch(LOCAL_PROXY + "/settings", { signal: AbortSignal.timeout(fetchTimeoutMs) });
+      if (res.status === 404) {
+        warnSettingsProxyOnce("old");
+        return false;
+      }
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (!data?.ok) return false;
+      if (!data.settings || typeof data.settings !== "object") {
+        const raw = localStorage.getItem(SETTINGS_KEY) || localStorage.getItem(LEGACY_SETTINGS_KEY);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === "object") await pushSettingsToDisk(parsed);
+          } catch (_) {
+            /* ignore */
+          }
+        }
+        return false;
+      }
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(data.settings));
+      try {
+        localStorage.setItem(LEGACY_SETTINGS_KEY, JSON.stringify(data.settings));
+      } catch (_) {
+        /* ignore */
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function pushSettingsToDisk(settingsObj) {
+    try {
+      const probe = await probeSettingsProxy(1000);
+      if (probe === "old") {
+        warnSettingsProxyOnce("old");
+        return { ok: false, reason: "old-proxy" };
+      }
+      if (probe === "down") {
+        return { ok: false, reason: "proxy-down" };
+      }
+      const res = await fetch(LOCAL_PROXY + "/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: settingsObj }),
+        signal: AbortSignal.timeout(2000),
+      });
+      if (res.status === 404) {
+        warnSettingsProxyOnce("old");
+        return { ok: false, reason: "old-proxy" };
+      }
+      if (!res.ok) return { ok: false, reason: "http" };
+      const data = await res.json().catch(() => null);
+      if (!data?.ok) return { ok: false, reason: "api" };
+      return { ok: true };
+    } catch (_) {
+      return { ok: false, reason: "error" };
+    }
   }
 
   async function localProxyFetchJson({ upstreamUrl, method, headers, body, signal }) {
@@ -404,16 +558,18 @@ src = src.replace(
   `async function optimizePrompt(userText, settings, signal) {
     // Pass user draft through as-is. Write path writes model output once (after light format).
     const rawDraft = normalizeText(userText);
+    const locked = ["concise", "structured", "coding"].includes(settings.style);
     const styleRow = Array.isArray(settings.styles)
       ? settings.styles.find((s) => s.id === settings.style)
       : null;
     const system = String(
-      (styleRow && styleRow.systemPrompt) ||
+      (locked && DEFAULT_SYSTEM_PROMPTS[settings.style]) ||
+        (styleRow && styleRow.systemPrompt) ||
         settings.systemPrompts?.[settings.style] ||
         DEFAULT_SYSTEM_PROMPTS[settings.style] ||
         DEFAULT_SYSTEM_PROMPTS.structured ||
         "",
-    ).trim();`,
+    ).trim();`
 );
 
 src = src.replace(
@@ -778,7 +934,7 @@ src = src.replace(
     event.preventDefault();
     event.stopPropagation();
     if (event.altKey || event.metaKey) {
-      openSettingsPanel();
+      void openSettingsPanel();
       return;
     }
     if (runtime.loading) {
@@ -790,14 +946,14 @@ src = src.replace(
       runRestore();
       return;
     }
-    runOptimize();
+    void runOptimize();
   }
 
   function onButtonContextMenu(event) {
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
-    openSettingsPanel();
+    void openSettingsPanel();
   }`,
 );
 
@@ -809,16 +965,23 @@ src = src.replace(
   /function openSettingsPanel\(\) \{[\s\S]*?\n  \}\n\n\n  function scheduleEnsure/,
   `${settingsDom}
 
-  function openSettingsPanel() {
+  async function openSettingsPanel(opts) {
     try {
-      openSettingsPanelDomSafe();
+      // Short wait so the sheet opens quickly; full sync continues in background.
+      await pullSettingsFromDisk({ waitMs: 450, fetchTimeoutMs: 600 });
+    } catch (_) {
+      /* ignore */
+    }
+    try {
+      openSettingsPanelDomSafe(opts);
     } catch (error) {
       console.error(DEBUG_PREFIX, "settings panel failed", error);
       showToast("设置面板打开失败（详见控制台）", "error");
     }
+    void pullSettingsFromDisk({ waitMs: 2000, fetchTimeoutMs: 1500 });
   }
 
-  function scheduleEnsure`,
+  function scheduleEnsure`
 );
 
 const themeCssPath = path.join(root, "src", "theme-css.css");
@@ -995,7 +1158,13 @@ const checks = [
   ["svg early", src.includes("buildOptimizeIconSvgEarly")],
   ["settings dom", src.includes("openSettingsPanelDomSafe")],
   ["load styles", src.includes("parsed.styles") && src.includes("LEGACY_SETTINGS_KEY")],
-  ["save styles", /function saveSettings\(settings\) \{[\s\S]*?styles: Array\.isArray/.test(src)],
+  ["save styles", /function saveSettings\(settings\) \{[\s\S]*?Array\.isArray\(settings\?\.styles\)/.test(src)],
+  ["apiKey wrap", src.includes("encodeStoredApiKey") && src.includes("decodeStoredApiKey")],
+  ["dirty close", src.includes("cpo-confirm-dialog") && src.includes("requestClose") && src.includes("放弃并关闭") && !src.includes("window.confirm")],
+  ["disk settings", src.includes("pullSettingsFromDisk") && src.includes("pushSettingsToDisk") && src.includes("/settings") && src.includes("probeSettingsProxy")],
+  ["honest save", src.includes("已存到缓存") && src.includes("磁盘同步失败")],
+  ["modelIds persist", src.includes("modelIds")],
+  ["locked runtime prompt", src.includes('["concise", "structured", "coding"].includes(settings.style)')],
   ["no const HOST detect", !/const\s+HOST\s*=\s*detectHost/.test(src)],
   ["workbench ensure", src.includes("ensureWorkbenchSparkleButton")],
   ["alt settings", src.includes("event.altKey")],

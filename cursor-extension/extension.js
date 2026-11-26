@@ -146,9 +146,20 @@ function removeWorkbenchInject() {
 }
 
 async function activate(context) {
-  const status = await startProxy();
+  const storageDir = context.globalStorageUri?.fsPath || path.join(process.env.APPDATA || "", "PromptSpark");
+  try {
+    fs.mkdirSync(storageDir, { recursive: true });
+  } catch (error) {
+    console.warn("[PromptSpark] storage mkdir failed", error?.message || error);
+  }
+  const settingsPath = path.join(storageDir, "settings.json");
+  process.env.CPO_SETTINGS_PATH = settingsPath;
+
+  const status = await startProxy({ settingsPath });
   if (status === "failed") {
     console.warn("[PromptSpark] proxy failed to start");
+  } else {
+    console.info("[PromptSpark] settings file:", settingsPath);
   }
 
   const inject = ensureWorkbenchInject(context.extensionPath);

@@ -2,8 +2,8 @@
   "name": "promptspark",
   "displayName": "PromptSpark",
   "description": "Cursor Composer 提示词优化与快捷命令；随扩展启动本机 LLM 代理。",
-  "version": "1.4.10",
-  "publisher": "promptspark",
+  "version": "1.4.11",
+  "publisher": "xiaoyangtx996",
   "icon": "media/icon.png",
   "galleryBanner": {
     "color": "#0F1115",
@@ -21,8 +21,15 @@
   "engines": {
     "vscode": "^1.80.0"
   },
-  "categories": ["Other"],
-  "keywords": ["cursor", "prompt", "composer", "llm"],
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "cursor",
+    "prompt",
+    "composer",
+    "llm"
+  ],
   "activationEvents": [
     "onStartupFinished"
   ],

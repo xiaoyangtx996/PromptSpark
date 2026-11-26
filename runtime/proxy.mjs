@@ -11,7 +11,29 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.CPO_PROXY_PORT || 37841);
 const HOST = "127.0.0.1";
+const VERSION = "1.4.11";
 const PID_FILE = path.join(__dirname, ".proxy.pid");
+const SETTINGS_FILE =
+  process.env.CPO_SETTINGS_PATH ||
+  path.join(process.env.APPDATA || process.env.HOME || __dirname, "PromptSpark", "settings.json");
+
+function readSettingsFile() {
+  try {
+    if (!fs.existsSync(SETTINGS_FILE)) return null;
+    const parsed = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSettingsFile(obj) {
+  const dir = path.dirname(SETTINGS_FILE);
+  fs.mkdirSync(dir, { recursive: true });
+  const tmp = `${SETTINGS_FILE}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(obj, null, 2), "utf8");
+  fs.renameSync(tmp, SETTINGS_FILE);
+}
 
 function writePid() {
   try {
@@ -56,7 +78,33 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${HOST}:${PORT}`);
 
   if (req.method === "GET" && (url.pathname === "/health" || url.pathname === "/")) {
-    sendJson(res, 200, { ok: true, service: "promptspark-proxy", version: "1.4.10" });
+    sendJson(res, 200, {
+      ok: true,
+      service: "promptspark-proxy",
+      version: VERSION,
+      settingsPath: SETTINGS_FILE,
+    });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/settings") {
+    sendJson(res, 200, { ok: true, settings: readSettingsFile(), path: SETTINGS_FILE });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/settings") {
+    try {
+      const raw = await readBody(req);
+      const payload = JSON.parse(raw.toString("utf8") || "{}");
+      if (!payload?.settings || typeof payload.settings !== "object") {
+        sendJson(res, 400, { ok: false, error: "settings object required" });
+        return;
+      }
+      writeSettingsFile(payload.settings);
+      sendJson(res, 200, { ok: true, path: SETTINGS_FILE });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) || "write failed" });
+    }
     return;
   }
 

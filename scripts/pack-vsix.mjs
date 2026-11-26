@@ -28,6 +28,12 @@ function readVersion() {
   return pkg.version || "0.0.0";
 }
 
+// Local pack: repo version +1 (use --no-bump to skip; release flow sets exact online+1 first).
+const noBump = process.argv.includes("--no-bump");
+if (!noBump) {
+  execSync("node scripts/bump-version.mjs", { cwd: ROOT, stdio: "inherit" });
+}
+
 execSync("node scripts/render-icon.mjs", { cwd: ROOT, stdio: "inherit" });
 execSync("node build.mjs", { cwd: ROOT, stdio: "inherit" });
 const script = path.join(DIST, "prompt-optimize.js");
@@ -105,7 +111,7 @@ if (!packed) {
     `<?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Language="en-US" Id="promptspark" Version="${version}" Publisher="promptspark" />
+    <Identity Language="en-US" Id="promptspark" Version="${version}" Publisher="xiaoyangtx996" />
     <DisplayName>PromptSpark</DisplayName>
     <Description xml:space="preserve">Cursor Composer 提示词优化与快捷命令</Description>
   </Metadata>
