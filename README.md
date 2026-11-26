@@ -160,3 +160,7 @@ node install.mjs --uninstall --hosts=cursor
 ## License
 
 MIT
+
+## 友链
+
+- [LINUX DO](https://linux.do)
