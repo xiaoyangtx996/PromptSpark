@@ -190,7 +190,7 @@
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   color: var(--cpo-text);
-  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
 }
 
 [${PANEL_ATTR}].cpo-apple *,
@@ -201,7 +201,7 @@
 
 [${PANEL_ATTR}].cpo-apple .cpo-card {
   position: relative !important;
-  width: min(430px, calc(100vw - 48px)) !important;
+  width: min(460px, calc(100vw - 48px)) !important;
   min-width: 0 !important;
   height: min(660px, calc(100vh - 48px)) !important;
   min-height: 0 !important;
@@ -312,7 +312,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font: 510 12px/1.15 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  font: 510 13.5px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
   letter-spacing: -0.01em;
   color: rgba(60, 60, 67, 0.85);
   background: transparent;
@@ -396,14 +396,14 @@
   flex: 0 0 auto;
 }
 [${PANEL_ATTR}].cpo-apple .cpo-sec-text {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: #666a72;
   line-height: 1.2;
 }
 [${PANEL_ATTR}].cpo-apple .cpo-sec-title-strong .cpo-sec-text {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 650;
   color: #25262a;
 }
@@ -456,7 +456,7 @@
   border: 1px solid #e3e3e7;
   background: #ffffff;
   color: #34363b;
-  font: 500 12px/28px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif !important;
+  font: 500 13px/28px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif !important;
   white-space: nowrap !important;
   word-break: keep-all !important;
   overflow: visible !important;
@@ -476,7 +476,7 @@
 }
 [${PANEL_ATTR}].cpo-apple .cpo-field-name > span,
 [${PANEL_ATTR}].cpo-apple .cpo-field > span {
-  font-size: 13px !important;
+  font-size: 14px !important;
   font-weight: 600 !important;
   color: #666a72 !important;
 }
@@ -542,8 +542,8 @@
   box-shadow: none !important;
   padding: 12px !important;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif !important;
-  font-size: 11px !important;
-  line-height: 1.65 !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
   color: #353943 !important;
   resize: none;
   overflow: auto;
@@ -718,7 +718,7 @@
   min-height: 37px;
   height: 37px;
   font: inherit !important;
-  font-size: 12px !important;
+  font-size: 14px !important;
   outline: none;
   box-shadow: none !important;
   transition: all 150ms ease;
@@ -732,8 +732,8 @@
   overflow: auto;
   scrollbar-width: thin;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif !important;
-  font-size: 11px !important;
-  line-height: 1.65;
+  font-size: 14px !important;
+  line-height: 1.6;
   color: #353943 !important;
 }
 
@@ -774,7 +774,7 @@
   color: #303238;
   padding: 0 11px;
   font: inherit;
-  font-size: 12px;
+  font-size: 14px;
   text-align: left;
   cursor: pointer;
   outline: none;
@@ -845,7 +845,7 @@
   padding: 8px 10px;
   border-radius: 7px;
   font: inherit;
-  font-size: 12px;
+  font-size: 14px;
   cursor: pointer;
   transition: all 150ms ease;
 }
@@ -939,7 +939,7 @@
   border-radius: 6px;
   padding: 0 4px;
   font: inherit;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 550;
   cursor: pointer;
   flex: 1 1 0;
@@ -1005,8 +1005,8 @@
 }
 [${PANEL_ATTR}].cpo-apple .cpo-confirm-msg {
   margin: 0 0 16px;
-  font-size: 13px;
-  line-height: 1.4;
+  font-size: 14px;
+  line-height: 1.45;
   color: #86868b;
 }
 [${PANEL_ATTR}].cpo-apple .cpo-confirm-actions {
@@ -1026,7 +1026,7 @@
   border: 1px solid #dddee3;
   background: #ffffff;
   color: #1d1d1f;
-  font: 500 13px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  font: 500 14px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
   white-space: nowrap;
   cursor: pointer;
   display: inline-flex;
@@ -1102,7 +1102,7 @@
   border: 1px solid #dddee3;
   padding: 0 14px;
   font: inherit;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   background: #ffffff;
@@ -1115,9 +1115,9 @@
   transition: all 150ms ease;
 }
 [${PANEL_ATTR}].cpo-apple .cpo-sheet-actions > .cpo-btn {
-  width: 57px;
-  min-width: 57px;
-  padding: 0;
+  width: auto;
+  min-width: 64px;
+  padding: 0 12px;
 }
 [${PANEL_ATTR}].cpo-apple .cpo-btn:hover {
   background: #f6f6f7;
@@ -1182,6 +1182,9 @@
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-radius: 12px !important;
+  font-size: 14px !important;
+  line-height: 1.45 !important;
+  padding: 12px 16px !important;
 }
 
 /* Critical: reduced-transparency must NOT paint overlay white */

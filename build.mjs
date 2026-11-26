@@ -459,7 +459,11 @@ src = src.replace(
     }
     const envelope = await res.json().catch(() => ({}));
     if (envelope?.error && envelope?.status == null && envelope?.ok === false) {
-      throw new Error(collapseWs(envelope.error).slice(0, 240));
+      const rawErr = collapseWs(envelope.error);
+      const nice = /fetch failed|failed to fetch|econnreset|etimedout|network/i.test(rawErr)
+        ? "上游请求失败（网络抖动），请再试一次；若持续失败请检查 Base URL / API Key / 代理"
+        : rawErr;
+      throw new Error(nice.slice(0, 240));
     }
     const httpStatus = Number(envelope.status || 0);
     const rawBody = typeof envelope.body === "string" ? envelope.body : "";

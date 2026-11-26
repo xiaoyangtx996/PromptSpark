@@ -64,6 +64,31 @@ function sendJson(res, status, obj) {
   res.end(body);
 }
 
+function humanizeUpstreamError(error) {
+  const msg = String(error?.message || error || "").trim();
+  const cause = String(error?.cause?.message || error?.cause || "").trim();
+  const blob = `${msg} ${cause}`;
+  if (/fetch failed|failed to fetch|econnreset|etimedout|enotfound|econnrefused|socket|network|und_err/i.test(blob)) {
+    return "上游请求失败（网络抖动），请再试一次；若持续失败请检查 Base URL / API Key / 代理";
+  }
+  return msg || "proxy error";
+}
+
+async function fetchUpstreamWithRetry(target, init, retries = 2) {
+  let lastErr;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await fetch(target, init);
+    } catch (error) {
+      lastErr = error;
+      if (i < retries) {
+        await new Promise((r) => setTimeout(r, 280 * (i + 1)));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") {
     res.writeHead(204, {
@@ -123,12 +148,16 @@ const server = http.createServer(async (req, res) => {
       delete headers["content-length"];
       delete headers["connection"];
 
-      const upstream = await fetch(target, {
-        method,
-        headers,
-        body: method === "GET" || method === "HEAD" ? undefined : payload.body ?? null,
-        signal: AbortSignal.timeout(Number(payload.timeout_ms || 60000)),
-      });
+      const upstream = await fetchUpstreamWithRetry(
+        target,
+        {
+          method,
+          headers,
+          body: method === "GET" || method === "HEAD" ? undefined : payload.body ?? null,
+          signal: AbortSignal.timeout(Number(payload.timeout_ms || 60000)),
+        },
+        2,
+      );
       const text = await upstream.text();
       sendJson(res, 200, {
         ok: upstream.ok,
@@ -138,7 +167,7 @@ const server = http.createServer(async (req, res) => {
     } catch (error) {
       sendJson(res, 502, {
         ok: false,
-        error: error?.message || String(error) || "proxy error",
+        error: humanizeUpstreamError(error),
       });
     }
     return;

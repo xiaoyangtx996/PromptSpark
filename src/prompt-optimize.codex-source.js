@@ -1480,13 +1480,13 @@ author: Codex++ Community
         bottom: 88px;
         transform: translateX(-50%);
         z-index: 2147483000;
-        max-width: min(520px, calc(100vw - 32px));
-        padding: 10px 14px;
-        border-radius: 10px;
+        max-width: min(560px, calc(100vw - 32px));
+        padding: 12px 16px;
+        border-radius: 12px;
         border: 1px solid rgba(255,255,255,.12);
         background: rgba(24,24,27,.94);
         color: #f4f4f5;
-        font: 13px/1.4 system-ui, -apple-system, Segoe UI, sans-serif;
+        font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         box-shadow: 0 10px 30px rgba(0,0,0,.35);
         pointer-events: none;
       }
