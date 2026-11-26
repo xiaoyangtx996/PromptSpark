@@ -1,27 +1,17 @@
 #!/usr/bin/env node
-/**
- * Sync extension icon from brand mark assets.
- * Does not regenerate the old procedural spark — pack:vsix must keep the new mark.
- */
+/** Sync extension icon from assets/brand/logo-promptspark.png */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.join(__dirname, "..");
-const BRAND = path.join(ROOT, "assets", "brand");
-const MEDIA = path.join(ROOT, "cursor-extension", "media");
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const mark128 = path.join(ROOT, "assets", "brand", "logo-promptspark.png");
+const mediaIcon = path.join(ROOT, "cursor-extension", "media", "icon.png");
 
-const mark128 = path.join(BRAND, "logo-promptspark.png");
-const mark512 = path.join(BRAND, "logo-mark.png");
 if (!fs.existsSync(mark128)) {
-  throw new Error("missing assets/brand/logo-promptspark.png — run scripts/split-logo.py first");
+  throw new Error("missing assets/brand/logo-promptspark.png — run: python scripts/split-logo.py");
 }
 
-fs.mkdirSync(MEDIA, { recursive: true });
-fs.copyFileSync(mark128, path.join(MEDIA, "icon.png"));
-fs.copyFileSync(mark128, path.join(BRAND, "logo-promptspark.png"));
-if (fs.existsSync(mark512)) {
-  // keep mark as-is; only ensure 128 icon exists for VSIX
-}
-console.log("synced", path.join(MEDIA, "icon.png"), "from", mark128);
+fs.mkdirSync(path.dirname(mediaIcon), { recursive: true });
+fs.copyFileSync(mark128, mediaIcon);
+console.log("synced", mediaIcon, "from", mark128);

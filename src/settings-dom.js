@@ -100,55 +100,6 @@
     ]);
   }
 
-  function cpoLucideSvg(className, size, paths) {
-    const svgNS = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(svgNS, "svg");
-    svg.setAttribute("class", className);
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.setAttribute("width", String(size));
-    svg.setAttribute("height", String(size));
-    svg.setAttribute("fill", "none");
-    svg.setAttribute("stroke", "currentColor");
-    svg.setAttribute("stroke-width", "1.8");
-    svg.setAttribute("stroke-linecap", "round");
-    svg.setAttribute("stroke-linejoin", "round");
-    svg.setAttribute("aria-hidden", "true");
-    for (const d of paths) {
-      const path = document.createElementNS(svgNS, "path");
-      path.setAttribute("d", d);
-      svg.appendChild(path);
-    }
-    return svg;
-  }
-
-  function cpoInfoGlyph() {
-    return cpoLucideSvg("cpo-info-glyph", 12, [
-      "M12 16v-4",
-      "M12 8h.01",
-      "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z",
-    ]);
-  }
-
-  function cpoTabGlyph(kind) {
-    if (kind === "styles") {
-      // Lucide sparkle
-      return cpoLucideSvg("cpo-tab-glyph", 13, [
-        "M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z",
-        "M5 16l.8 2.2L8 19l-2.2.8L5 22l-.8-2.2L2 19l2.2-.8L5 16z",
-        "M19 13l.6 1.6L21 15l-1.4.6L19 17l-.6-1.4L17 15l1.4-.6L19 13z",
-      ]);
-    }
-    if (kind === "commands") {
-      // Lucide zap
-      return cpoLucideSvg("cpo-tab-glyph", 13, ["M13 2L3 14h9l-1 8 10-12h-9l1-8z"]);
-    }
-    // Lucide settings (simplified gear)
-    return cpoLucideSvg("cpo-tab-glyph", 13, [
-      "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
-      "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.36.31.83.47 1.31.43H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z",
-    ]);
-  }
-
   function cpoCloseGlyph() {
     const svgNS = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(svgNS, "svg");
@@ -415,10 +366,13 @@
       placeholder: "例如：继续 或 /navigate-software-development",
       rows: "5",
     });
-    const commandHintEl = cpoEl("div", {
-      className: "cpo-lock-hint",
-      text: "标题显示在 Composer 按钮上；内容为点击后填入并自动发送的文本。下拉可切换、新增或删除。",
+    const commandHelp = cpoEl("button", {
+      type: "button",
+      className: "cpo-prompt-help",
+      title: "标题显示在 Composer 按钮上；内容为点击后填入并自动发送的文本。下拉可切换、新增或删除。",
+      "aria-label": "快捷命令说明",
     });
+    commandHelp.appendChild(cpoHelpGlyph());
 
     const protocolDd = cpoEl("div", { className: "cpo-dd", "data-cpo": "protocol" });
     const protocolTrigger = cpoEl("button", {
@@ -902,8 +856,10 @@
     );
 
     paneCommands.append(
-      cpoEl("div", { className: "cpo-field" }, [cpoSecTitle("当前命令"), commandDd]),
-      cpoEl("div", { className: "cpo-hint-row" }, [cpoInfoGlyph(), commandHintEl]),
+      cpoEl("div", { className: "cpo-field" }, [
+        cpoEl("div", { className: "cpo-prompt-head-row" }, [cpoSecTitle("当前命令"), commandHelp]),
+        commandDd,
+      ]),
       cpoEl("div", { className: "cpo-field" }, [cpoSecTitle("标题"), commandTitleEl]),
       cpoEl("div", { className: "cpo-field cpo-field-grow" }, [cpoSecTitle("内容"), commandContentEl]),
     );
@@ -1076,12 +1032,19 @@
         activeCommandId,
       });
     }
-    // Stabilize commits once, then freeze baseline after focus so open/focus
+    // Stabilize commits once; freeze baseline after paint/focus so open
     // side-effects do not mark the sheet dirty.
     let initialSnapshot = draftSnapshot();
+    let baselineReady = false;
 
     function isDirty() {
+      if (!baselineReady) return false;
       return draftSnapshot() !== initialSnapshot;
+    }
+
+    function captureBaseline() {
+      initialSnapshot = draftSnapshot();
+      baselineReady = true;
     }
 
     const confirmStayBtn = cpoEl("button", {
@@ -1257,7 +1220,7 @@
     } else {
       stylePromptEl.focus();
     }
-    queueMicrotask(() => {
-      initialSnapshot = draftSnapshot();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(captureBaseline);
     });
   }

@@ -1,8 +1,12 @@
 import fs from "node:fs";
 
+const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+const version = pkg.version;
+const versionRe = version.replace(/\./g, "\\.");
+
 const s = fs.readFileSync("dist/prompt-optimize.js", "utf8");
 const ok = {
-  v: /SCRIPT_VERSION = "1\.4\.11"/.test(s),
+  v: new RegExp(`SCRIPT_VERSION = "${versionRe}"`).test(s),
   brandIcon: s.includes("cpo-brand-icon") && s.includes("cpoBrandIcon"),
   plainTextOut: s.includes("demoteMarkdownForPlainInput") && s.includes("no markdown wrapper around the whole answer"),
   upstreamPrompts:
@@ -38,6 +42,7 @@ const ok = {
   noWhiteOverlay: s.includes("prefers-reduced-transparency") && s.includes("background: transparent !important"),
   noDeadFinders: !s.includes("findStructuralContextGroup") && !s.includes("findBestModelControl"),
   noOrphanCss: !s.includes(".cpo-grid") && !s.includes("cpo-channel-hint") && !s.includes("cpo-linkish"),
+  noDeadTabGlyph: !s.includes("function cpoTabGlyph"),
   commandDd: s.includes("cpo-command-dd") && s.includes("＋ 新增命令") && !s.includes("cpo-cmd-list"),
   continueMenu:
     s.includes("CONTINUE_MENU_ATTR") &&
@@ -57,7 +62,8 @@ const ok = {
   noEarlyReturnDead: !/ensureWorkbenchSparkleButton\(\);\s*return;\s*if \(runtime\.disposed\)/.test(s),
   workbench: s.includes("ensureWorkbenchSparkleButton"),
   settingsDom: s.includes("openSettingsPanelDomSafe"),
+  commandHelpTip: s.includes("标题显示在 Composer 按钮上"),
 };
 console.log(ok);
 if (Object.values(ok).some((x) => !x)) process.exit(1);
-console.log(`verify ok, bytes=${s.length}`);
+console.log(`verify ok v${version}, bytes=${s.length}`);

@@ -80,9 +80,9 @@ dist/                本地构建产物（gitignore；含 .vsix）
 
 ```powershell
 npm run build       # UI 脚本 → dist/prompt-optimize.js
-npm run pack:vsix   # 仓库版本 +1，产出 VSIX
+npm run pack:vsix   # 仓库版本 +1，产出 VSIX（联调拖装）
 npm run verify      # 构建 + 结构校验
-npm run release     # 打包并创建/更新 GitHub Release
+npm run release     # 线上 tag +1 → 打包 → 创建/更新 GitHub Release
 ```
 
 品牌图透明底：

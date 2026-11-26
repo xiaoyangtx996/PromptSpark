@@ -257,8 +257,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-[${PANEL_ATTR}].cpo-apple .cpo-brand-tag { display: none !important; }
-
 [${PANEL_ATTR}].cpo-apple .cpo-close-x {
   appearance: none;
   flex: 0 0 auto;
@@ -429,13 +427,6 @@
   min-height: 24px;
 }
 
-[${PANEL_ATTR}].cpo-apple .cpo-inline-label {
-  flex: 0 0 auto;
-  font-size: 13px;
-  font-weight: 600;
-  color: #666a72;
-}
-
 [${PANEL_ATTR}].cpo-apple .cpo-custom-block {
   display: flex;
   flex-direction: column;
@@ -475,25 +466,6 @@
 }
 [${PANEL_ATTR}].cpo-apple .cpo-btn-add:hover {
   background: #f6f6f7;
-}
-
-[${PANEL_ATTR}].cpo-apple .cpo-hint-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 5px;
-  color: #9699a0;
-}
-[${PANEL_ATTR}].cpo-apple .cpo-info-glyph {
-  flex: 0 0 auto;
-  margin-top: 1px;
-  color: #9699a0;
-}
-[${PANEL_ATTR}].cpo-apple .cpo-hint-row .cpo-lock-hint {
-  margin: 0;
-  padding: 0;
-  font-size: 11px !important;
-  line-height: 1.4;
-  color: #9699a0 !important;
 }
 
 [${PANEL_ATTR}].cpo-apple .cpo-field-name {
@@ -946,18 +918,18 @@
   align-items: stretch;
   gap: 2px;
   box-sizing: border-box;
-  width: 132px;
-  flex: 0 0 132px;
+  width: auto;
+  flex: 0 0 auto;
   height: 29px;
+  min-width: 148px;
+  max-width: min(220px, 58%);
   padding: 2px;
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.06);
-  min-width: 132px;
-  max-width: 132px;
 }
 
 [${PANEL_ATTR}].cpo-apple .cpo-segment-sm {
-  flex: 0 0 132px;
+  flex: 0 0 auto;
 }
 
 [${PANEL_ATTR}].cpo-apple .cpo-seg-btn {
@@ -989,16 +961,6 @@
 
 [${PANEL_ATTR}].cpo-apple .cpo-seg-btn:active {
   transform: scale(0.98);
-}
-
-[${PANEL_ATTR}].cpo-apple .cpo-lock-hint,
-[${PANEL_ATTR}].cpo-apple .cpo-footnote {
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.4;
-  font-weight: 400;
-  color: #9699a0 !important;
-  flex: 0 0 auto;
 }
 
 [${PANEL_ATTR}].cpo-apple .cpo-warn-banner {
@@ -1208,9 +1170,8 @@
     font-size: 18px;
   }
   [${PANEL_ATTR}].cpo-apple .cpo-segment {
-    width: auto;
-    flex: 1 1 auto;
-    max-width: 160px;
+    min-width: 0;
+    max-width: min(200px, 62%);
   }
 }
 
@@ -1257,13 +1218,7 @@
   [${PANEL_ATTR}].cpo-apple .cpo-brand-name {
     font-size: 18px;
   }
-  [${PANEL_ATTR}].cpo-apple .cpo-brand-tag {
-    display: none;
-  }
   [${PANEL_ATTR}].cpo-apple .cpo-inline-row {
     gap: 10px;
-  }
-  [${PANEL_ATTR}].cpo-apple .cpo-tab-label {
-    font-size: 12px;
   }
 }

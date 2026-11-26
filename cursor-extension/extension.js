@@ -162,10 +162,13 @@ async function activate(context) {
     console.info("[PromptSpark] settings file:", settingsPath);
   }
 
+  const RESTART_HINT =
+    "请完全退出 Cursor 后再打开（托盘里的 Cursor 也要退出；不要只点 Reload Window）。";
+
   const inject = ensureWorkbenchInject(context.extensionPath);
   if (inject === "injected" || inject === "updated") {
     const pick = await vscode.window.showInformationMessage(
-      "PromptSpark 已写入 Composer 控件，请完全退出并重新打开 Cursor 后生效。",
+      `PromptSpark 已写入 Composer 控件。${RESTART_HINT}`,
       "我知道了",
     );
     void pick;
@@ -183,7 +186,7 @@ async function activate(context) {
     vscode.commands.registerCommand("promptspark.reinject", async () => {
       const r = ensureWorkbenchInject(context.extensionPath, { force: true });
       if (r === "injected" || r === "updated" || r === "unchanged") {
-        vscode.window.showInformationMessage("已注入。请完全退出并重新打开 Cursor。");
+        vscode.window.showInformationMessage(`已注入。${RESTART_HINT}`);
       } else if (r === "write-failed") {
         vscode.window.showErrorMessage("写入失败：请以管理员身份运行 Cursor 后再试。");
       } else {
@@ -192,7 +195,7 @@ async function activate(context) {
     }),
     vscode.commands.registerCommand("promptspark.removeUi", async () => {
       if (removeWorkbenchInject()) {
-        vscode.window.showInformationMessage("已移除 Composer 控件。请完全退出并重新打开 Cursor。");
+        vscode.window.showInformationMessage(`已移除 Composer 控件。${RESTART_HINT}`);
       } else {
         vscode.window.showErrorMessage("移除失败。");
       }

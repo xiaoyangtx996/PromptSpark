@@ -19,7 +19,6 @@ const FILES = [
   "runtime/proxy.mjs",
   "build.mjs",
   "install.mjs",
-  "scripts/verify-build.mjs",
 ];
 
 function readRepoVersion() {
@@ -50,19 +49,9 @@ for (const rel of FILES) {
   let text = fs.readFileSync(p, "utf8");
   let next = text.split(from).join(to);
   next = next.split(fromEscaped).join(toEscaped);
-  // build.mjs / verify-build may lag behind local pack bumps — force-set
+  // build.mjs may lag behind local pack bumps — force-set VERSION const
   if (rel === "build.mjs") {
     next = next.replace(/const VERSION = "[^"]+";/, `const VERSION = "${to}";`);
-  }
-  if (rel === "scripts/verify-build.mjs") {
-    next = next.replace(
-      /SCRIPT_VERSION = "\d+\.\d+\.\d+"/,
-      `SCRIPT_VERSION = "${to}"`,
-    );
-    next = next.replace(
-      /SCRIPT_VERSION = "1\\\.\d+\\\.\d+"/,
-      `SCRIPT_VERSION = "${to.replace(/\./g, "\\.")}"`,
-    );
   }
   if (next === text) {
     console.warn("warn: no version replace in", rel);

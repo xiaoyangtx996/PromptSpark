@@ -142,5 +142,17 @@ Move-Item -Force $zip ${JSON.stringify(outPath)}
 }
 
 if (!fs.existsSync(outPath)) throw new Error("VSIX not created: " + outPath);
+
+// Keep a few recent local VSIX; prune the rest.
+const oldVsix = fs
+  .readdirSync(DIST)
+  .filter((n) => /^PromptSpark-\d+\.\d+\.\d+\.vsix$/.test(n))
+  .map((n) => ({ n, t: fs.statSync(path.join(DIST, n)).mtimeMs }))
+  .sort((a, b) => b.t - a.t);
+for (const row of oldVsix.slice(3)) {
+  fs.rmSync(path.join(DIST, row.n), { force: true });
+  console.log("pruned", row.n);
+}
+
 console.log(`\n✓ VSIX ready: ${outPath}`);
 console.log("拖到 Cursor 窗口，或: Cursor → Extensions → … → Install from VSIX");
