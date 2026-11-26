@@ -6,35 +6,34 @@
 
 ## Screenshots
 
+### Composer 控件
+
+![Composer toolbar](https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/assets/readme/toolbar.png)
+
+### 设置面板
+
 一行两图；点击缩略图可打开原图放大查看。
 
 <table>
   <tr>
     <td align="center" width="50%">
-      <b>Composer 控件</b><br/>
-      <a href="https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/assets/readme/toolbar.png"><img src="https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/assets/readme/toolbar.png" width="360" alt="Composer toolbar"></a>
-    </td>
-    <td align="center" width="50%">
       <b>提示词优化</b><br/>
       <a href="https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/assets/readme/settings-styles.png"><img src="https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/assets/readme/settings-styles.png" width="360" alt="Settings styles"></a>
     </td>
-  </tr>
-  <tr>
     <td align="center" width="50%">
       <b>快捷命令</b><br/>
       <a href="https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/assets/readme/settings-commands.png"><img src="https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/assets/readme/settings-commands.png" width="360" alt="Settings commands"></a>
     </td>
+  </tr>
+  <tr>
     <td align="center" width="50%">
       <b>模型配置</b><br/>
       <a href="https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/assets/readme/settings-model.png"><img src="https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/assets/readme/settings-model.png" width="360" alt="Settings model"></a>
     </td>
-  </tr>
-  <tr>
     <td align="center" width="50%">
       <b>未保存确认</b><br/>
       <a href="https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/assets/readme/settings-confirm.png"><img src="https://raw.githubusercontent.com/xiaoyangtx996/PromptSpark/main/assets/readme/settings-confirm.png" width="360" alt="Settings confirm"></a>
     </td>
-    <td align="center" width="50%"></td>
   </tr>
 </table>
 

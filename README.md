@@ -21,35 +21,38 @@
 
 ## 界面预览
 
+### Composer 控件
+
+闪光（优化/还原）与「继续」快捷命令，嵌在 Composer 输入区旁：
+
+<p align="center">
+  <img src="./assets/readme/toolbar.png" width="720" alt="Composer 旁的继续按钮与闪光优化">
+</p>
+
+### 设置面板
+
 一行两图；点击缩略图可打开原图放大查看。
 
 <table>
   <tr>
     <td align="center" width="50%">
-      <b>Composer 控件</b><br/>
-      <a href="./assets/readme/toolbar.png"><img src="./assets/readme/toolbar.png" width="360" alt="Composer 旁的继续按钮与闪光优化"></a>
-    </td>
-    <td align="center" width="50%">
       <b>提示词优化</b><br/>
       <a href="./assets/readme/settings-styles.png"><img src="./assets/readme/settings-styles.png" width="360" alt="设置面板 · 提示词优化"></a>
     </td>
-  </tr>
-  <tr>
     <td align="center" width="50%">
       <b>快捷命令</b><br/>
       <a href="./assets/readme/settings-commands.png"><img src="./assets/readme/settings-commands.png" width="360" alt="设置面板 · 快捷命令"></a>
     </td>
+  </tr>
+  <tr>
     <td align="center" width="50%">
       <b>模型配置</b><br/>
       <a href="./assets/readme/settings-model.png"><img src="./assets/readme/settings-model.png" width="360" alt="设置面板 · 模型配置"></a>
     </td>
-  </tr>
-  <tr>
     <td align="center" width="50%">
       <b>未保存确认</b><br/>
       <a href="./assets/readme/settings-confirm.png"><img src="./assets/readme/settings-confirm.png" width="360" alt="放弃未保存更改确认框"></a>
     </td>
-    <td align="center" width="50%"></td>
   </tr>
 </table>
 
